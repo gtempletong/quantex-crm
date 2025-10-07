@@ -72,10 +72,11 @@ export async function GET(request: Request) {
       contacts: data || [],
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Unexpected error:', error);
+    const message = error instanceof Error ? error.message : 'Error desconocido';
     return NextResponse.json(
-      { error: 'Error inesperado', details: error.message },
+      { error: 'Error inesperado', details: message },
       { status: 500 }
     );
   }

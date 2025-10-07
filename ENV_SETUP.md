@@ -8,13 +8,10 @@ Crea un archivo `.env.local` en la raíz del proyecto con el siguiente contenido
 
 ```bash
 # URL de tu proyecto Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+SUPABASE_URL=https://znyirqvxnexqgsjwloyg.supabase.co
 
-# Clave pública (anon key)
-NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key-aqui
-
-# Opcional: Service key para operaciones server-side
-SUPABASE_SERVICE_KEY=tu-service-key-aqui
+# Clave de servicio (service role key)
+SUPABASE_KEY=tu-service-key-aqui
 ```
 
 ## Dónde obtener las credenciales
@@ -23,9 +20,8 @@ SUPABASE_SERVICE_KEY=tu-service-key-aqui
 2. Selecciona tu proyecto
 3. Ve a **Settings** → **API**
 4. Copia:
-   - **URL**: Project URL
-   - **ANON_KEY**: anon/public key
-   - **SERVICE_KEY**: service_role key (solo para servidor)
+   - **SUPABASE_URL**: Project URL
+   - **SUPABASE_KEY**: service_role key
 
 ## Configuración en Vercel
 

@@ -5,7 +5,7 @@
  * Muestra tabla de contactos con filtros y búsqueda
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Contact } from '@/lib/types';
 
 export default function Dashboard() {
@@ -16,7 +16,7 @@ export default function Dashboard() {
   const [filterEmail, setFilterEmail] = useState('');
 
   // Fetch contactos
-  const fetchContacts = async () => {
+  const fetchContacts = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -35,12 +35,12 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, filterEstado, filterEmail]);
 
   // Cargar contactos al montar y cuando cambien filtros
   useEffect(() => {
     fetchContacts();
-  }, [search, filterEstado, filterEmail]);
+  }, [search, filterEstado, filterEmail, fetchContacts]);
 
   return (
     <div className="min-h-screen bg-gray-50">
