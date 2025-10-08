@@ -45,14 +45,39 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">
-            Quantex CRM
-          </h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Gestión de contactos y empresas
-          </p>
+      <header className="bg-white shadow-lg border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex items-center justify-between">
+            {/* Logo y título */}
+            <div className="flex items-center space-x-4">
+              {/* Logo placeholder - puedes reemplazar con imagen real */}
+              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">Q</span>
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">
+                  Quantex CRM
+                </h1>
+                <p className="text-sm text-gray-600 mt-1">
+                  Gestión de contactos y empresas
+                </p>
+              </div>
+            </div>
+            
+            {/* Stats básicas */}
+            <div className="hidden md:flex items-center space-x-6">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-900">{contacts.length}</div>
+                <div className="text-xs text-gray-500">Total</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">
+                  {contacts.filter(c => c.email_sent).length}
+                </div>
+                <div className="text-xs text-gray-500">Contactados</div>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
