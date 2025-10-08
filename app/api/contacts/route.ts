@@ -18,6 +18,13 @@ export async function GET(request: Request) {
     const emailSent = searchParams.get('emailSent') || '';
     const limit = parseInt(searchParams.get('limit') || '100');
 
+    // Debug: verificar variables de entorno
+    console.log('Environment check:', {
+      hasUrl: !!process.env.SUPABASE_URL,
+      hasKey: !!process.env.SUPABASE_SERVICE_KEY,
+      urlStart: process.env.SUPABASE_URL?.substring(0, 20) + '...'
+    });
+
     const supabase = getServerSupabase();
 
     // Construir query
@@ -57,6 +64,12 @@ export async function GET(request: Request) {
     }
 
     const { data, error } = await query;
+
+    console.log('Query result:', { 
+      dataLength: data?.length || 0, 
+      error: error?.message || 'none',
+      firstContact: data?.[0]?.nombre_contacto || 'none'
+    });
 
     if (error) {
       console.error('Error fetching contacts:', error);
