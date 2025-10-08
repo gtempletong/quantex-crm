@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
     const supabase = getServerSupabase();
 
-    // Construir query
+    // Construir query - sin created_at que no existe
     let query = supabase
       .from('personas')
       .select(`
@@ -41,11 +41,9 @@ export async function GET(request: Request) {
         email_sent,
         email_sent_at,
         estado,
-        tipo_empresa,
-        created_at,
-        updated_at
+        tipo_empresa
       `)
-      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
       .limit(limit);
 
     // Aplicar filtros

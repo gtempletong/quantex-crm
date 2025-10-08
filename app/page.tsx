@@ -14,6 +14,7 @@ export default function Dashboard() {
   const [search, setSearch] = useState('');
   const [filterEstado, setFilterEstado] = useState('');
   const [filterEmail, setFilterEmail] = useState('');
+  const [sendingEmail, setSendingEmail] = useState<number | null>(null);
 
   // Fetch contactos
   const fetchContacts = useCallback(async () => {
@@ -36,6 +37,38 @@ export default function Dashboard() {
       setLoading(false);
     }
   }, [search, filterEstado, filterEmail]);
+
+  // Función para enviar email intro
+  const handleSendIntro = async (contactId: number, contactName: string) => {
+    setSendingEmail(contactId);
+    try {
+      const response = await fetch('/api/send-intro', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contactId,
+          contactName
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Actualizar la lista de contactos
+        await fetchContacts();
+        alert('Email enviado exitosamente!');
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error sending intro:', error);
+      alert('Error enviando email');
+    } finally {
+      setSendingEmail(null);
+    }
+  };
 
   // Cargar contactos al montar y cuando cambien filtros
   useEffect(() => {
@@ -176,6 +209,9 @@ export default function Dashboard() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Email Enviado
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Acciones
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -217,6 +253,26 @@ export default function Dashboard() {
                         ) : (
                           <span className="text-gray-400">✗ No</span>
                         )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <button
+                          onClick={() => handleSendIntro(contact.id, contact.nombre_contacto || '')}
+                          disabled={contact.email_sent || sendingEmail === contact.id}
+                          className={`px-3 py-1 text-xs font-medium rounded-md ${
+                            contact.email_sent
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : sendingEmail === contact.id
+                              ? 'bg-blue-400 text-white cursor-not-allowed'
+                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                        >
+                          {contact.email_sent 
+                            ? 'Ya enviado' 
+                            : sendingEmail === contact.id 
+                            ? 'Enviando...' 
+                            : 'Enviar Intro'
+                          }
+                        </button>
                       </td>
                     </tr>
                   ))}
