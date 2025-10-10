@@ -87,8 +87,9 @@ export async function POST(request: Request) {
     const firstName = extractFirstName(persona.nombre_contacto || '');
     console.log(`📝 Nombre completo: "${persona.nombre_contacto}" → Primer nombre: "${firstName}"`);
 
-    // 2. Llamar al modular agent para componer el email con plantilla
-    const composeResponse = await fetch('http://localhost:5003/api/modular-agent/execute-tool', {
+          // 2. Llamar al modular agent para componer el email con plantilla
+          const modularAgentUrl = process.env.MODULAR_AGENT_URL || 'https://quantex-modular-agent.loca.lt';
+          const composeResponse = await fetch(`${modularAgentUrl}/api/modular-agent/execute-tool`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -117,8 +118,8 @@ export async function POST(request: Request) {
     console.log(`📧 Subject: ${composeResult.subject}`);
     console.log(`📧 HTML Content length: ${composeResult.html_content?.length || 'undefined'}`);
 
-    // 3. Enviar el email usando Gmail
-    const sendResponse = await fetch('http://localhost:5003/api/modular-agent/execute-tool', {
+          // 3. Enviar el email usando Gmail
+          const sendResponse = await fetch(`${modularAgentUrl}/api/modular-agent/execute-tool`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

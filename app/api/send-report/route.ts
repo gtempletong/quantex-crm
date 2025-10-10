@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
 
     // Llamar al modular agent
-    const modularAgentUrl = process.env.MODULAR_AGENT_URL || 'http://localhost:5003';
+    const modularAgentUrl = process.env.MODULAR_AGENT_URL || 'https://quantex-modular-agent.loca.lt';
     const response = await fetch(`${modularAgentUrl}/api/send-report`, {
       method: 'POST',
       headers: {
