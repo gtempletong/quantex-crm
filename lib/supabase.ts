@@ -1,27 +1,32 @@
 /**
  * Cliente Supabase simple y centralizado
- * Usa las mismas variables que el resto del proyecto Quantex
+ * Usa SUPABASE_URL y SUPABASE_KEY (nombres consistentes con Vercel)
  */
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_KEY || '';
+// Server-side (API routes): usar Service Role Key para permitir escrituras con RLS
+const SERVER_SUPABASE_URL = process.env.SUPABASE_URL || '';
+// Prefer SUPABASE_SERVICE_KEY, but support legacy name SUPABASE_KEY
+const SERVER_SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || '';
 
-if (!supabaseUrl || !supabaseKey) {
-  console.warn('⚠️  Variables de Supabase no configuradas: SUPABASE_URL y SUPABASE_KEY');
+if (!SERVER_SUPABASE_URL || !SERVER_SUPABASE_SERVICE_KEY) {
+  console.error('❌ Variables de Supabase (server) NO configuradas');
+  console.error(`SUPABASE_URL: ${SERVER_SUPABASE_URL ? '✅' : '❌'}`);
+  console.error(`SERVICE/KEY: ${SERVER_SUPABASE_SERVICE_KEY ? '✅' : '❌'} (SUPABASE_SERVICE_KEY | SUPABASE_KEY)`);
 }
 
 /**
  * Helper para crear cliente en server-side (API routes)
  */
 export function getServerSupabase() {
-  return createClient(supabaseUrl, supabaseKey);
+  return createClient(SERVER_SUPABASE_URL, SERVER_SUPABASE_SERVICE_KEY);
 }
 
-/**
- * Cliente Supabase para usar en el cliente (browser)
- * Nota: En Next.js 13+ con App Router, prefiere usar getServerSupabase en Server Components
- */
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Client-side factory to avoid evaluating at import time on server
+export function getClientSupabase() {
+  const CLIENT_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const CLIENT_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  return createClient(CLIENT_SUPABASE_URL, CLIENT_SUPABASE_ANON_KEY);
+}
 

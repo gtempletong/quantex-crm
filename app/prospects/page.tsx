@@ -33,6 +33,7 @@ function EmailProspectsTab() {
   const [filterEstado, setFilterEstado] = useState('');
   const [filterEmail, setFilterEmail] = useState('');
   const [filterRegion, setFilterRegion] = useState('');
+  const [sortBy, setSortBy] = useState('email_sent_at');
   const [sendingEmail, setSendingEmail] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
@@ -45,6 +46,7 @@ function EmailProspectsTab() {
       if (filterEstado) params.append('estado', filterEstado);
       if (filterEmail) params.append('emailSent', filterEmail);
       if (filterRegion) params.append('region', filterRegion);
+      if (sortBy) params.append('sortBy', sortBy);
 
       const response = await fetch(`/api/contacts?${params.toString()}`);
       const data = await response.json();
@@ -57,7 +59,7 @@ function EmailProspectsTab() {
     } finally {
       setLoading(false);
     }
-  }, [search, filterEstado, filterEmail, filterRegion]);
+  }, [search, filterEstado, filterEmail, filterRegion, sortBy]);
 
   // Función para enviar email intro
   const handleSendIntro = async (contactId: number, contactName: string) => {
@@ -136,9 +138,6 @@ function EmailProspectsTab() {
           >
             <option value="">Todos los estados</option>
             <option value="activo">Activo</option>
-            <option value="contactado">Contactado</option>
-            <option value="negociacion">Negociación</option>
-            <option value="cerrado">Cerrado</option>
             <option value="descartado">Descartado</option>
           </select>
           <select
@@ -157,6 +156,16 @@ function EmailProspectsTab() {
           >
             <option value="">Región: Todas</option>
             <option value="13">Región Metropolitana</option>
+          </select>
+          <select
+            className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+          >
+            <option value="email_sent_at">Ordenar: Fecha Email</option>
+            <option value="nombre_contacto">Ordenar: Nombre</option>
+            <option value="created_at">Ordenar: Fecha Creación</option>
+            <option value="id">Ordenar: ID</option>
           </select>
         </div>
         <div className="mt-2 text-sm text-gray-600">
@@ -206,6 +215,9 @@ function EmailProspectsTab() {
                     Nombre
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Cargo
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Email
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -232,8 +244,10 @@ function EmailProspectsTab() {
                       <div className="text-sm font-medium text-gray-900">
                         {contact.nombre_contacto}
                       </div>
-                      <div className="text-sm text-gray-500">
-                        {contact.razon_social || contact.rut_empresa}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {contact.cargo_contacto || '-'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-normal break-words max-w-[220px]">
@@ -252,23 +266,54 @@ function EmailProspectsTab() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        contact.estado === 'activo' ? 'bg-green-100 text-green-800' :
-                        contact.estado === 'contactado' ? 'bg-blue-100 text-blue-800' :
-                        contact.estado === 'negociacion' ? 'bg-yellow-100 text-yellow-800' :
-                        contact.estado === 'cerrado' ? 'bg-purple-100 text-purple-800' :
-                        contact.estado === 'descartado' ? 'bg-red-100 text-red-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {contact.estado || 'Sin estado'}
-                      </span>
+                      <select
+                        className="p-1 border border-gray-300 rounded text-sm"
+                        value={contact.estado || ''}
+                        onChange={async (e) => {
+                          const newEstado = e.target.value;
+                          try {
+                            const res = await fetch('/api/contacts', {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ id: contact.id, estado: newEstado })
+                            });
+                            const result = await res.json();
+                            if (!result.success) throw new Error(result.error || 'Error actualizando estado');
+                            // Refrescar lista
+                            fetchContacts();
+                          } catch (err) {
+                            console.error('Error updating estado:', err);
+                            alert('Error actualizando estado');
+                          }
+                        }}
+                      >
+                        <option value="">Sin estado</option>
+                        <option value="activo">Activo</option>
+                        <option value="descartado">Descartado</option>
+                      </select>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {contact.email_sent ? (
-                        <span className="text-green-600 font-medium">✓ Sí</span>
-                      ) : (
-                        <span className="text-gray-400">✗ No</span>
-                      )}
+                      <div>
+                        {contact.email_sent ? (
+                          <span className="text-green-600 font-medium">✓ Sí</span>
+                        ) : (
+                          <span className="text-gray-400">✗ No</span>
+                        )}
+                        {contact.last_email_sent_at && (
+                          <div className="text-xs text-gray-400 mt-1">
+                            {new Date(contact.last_email_sent_at).toLocaleDateString('es-CL')}
+                          </div>
+                        )}
+                        {contact.last_email_status && (
+                          <div className="text-xs mt-1">
+                            {contact.last_email_status === 'failed' ? (
+                              <span className="text-red-500">❌ Falló</span>
+                            ) : (
+                              <span className="text-green-500">✅ Enviado</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

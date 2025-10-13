@@ -306,16 +306,54 @@ export default function ActiveContactsPage() {
   const totalPages = Math.ceil(total / limit);
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Contactos Activos</h1>
-            <p className="text-gray-600 mt-2">
-              Gestiona clientes y prospectos que pueden recibir comunicaciones
-            </p>
+    <div className="bg-gray-50 min-h-screen">
+      {/* CRM Header */}
+      <header className="bg-white shadow-lg border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex items-center justify-between">
+            {/* Logo y título */}
+            <div className="flex items-center space-x-4">
+              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">Q</span>
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">
+                  Quantex CRM
+                </h1>
+                <p className="text-sm text-gray-600 mt-1">
+                  Gestión de contactos y empresas
+                </p>
+              </div>
+            </div>
+            
+            {/* Stats básicas */}
+            <div className="hidden md:flex items-center space-x-6">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-900">{contacts.length}</div>
+                <div className="text-xs text-gray-500">Total Contactos</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">
+                  {contacts.filter(c => c.can_receive_communications).length}
+                </div>
+                <div className="text-xs text-gray-500">Pueden Recibir</div>
+              </div>
+            </div>
           </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header de la página */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Contactos Activos</h2>
+              <p className="text-gray-600 mt-1">
+                Gestiona clientes y prospectos que pueden recibir comunicaciones
+              </p>
+            </div>
           <div className="flex gap-3 flex-wrap items-center">
             {/* Selector de tipo de reporte */}
             <div className="flex items-center gap-2">
@@ -648,7 +686,7 @@ export default function ActiveContactsPage() {
                             <Edit2 size={16} />
                           </button>
                           <button
-                            onClick={() => handleDelete(contact.id, contact.email)}
+                            onClick={() => handleDelete(contact.id, contact.email || 'Sin email')}
                             className="text-red-600 hover:text-red-900"
                             title="Eliminar contacto"
                           >
@@ -859,6 +897,7 @@ export default function ActiveContactsPage() {
           </div>
         </div>
       )}
+      </main>
     </div>
   );
 }

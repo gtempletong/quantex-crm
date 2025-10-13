@@ -91,9 +91,9 @@ export default function ChartsPage() {
 
     console.log('📊 Creando gráfico TradingView...');
 
-    let chart;
+    let chart: any;
     try {
-      // Crear nuevo gráfico usando la API correcta
+      // Crear nuevo gráfico usando la API correcta con 2 escalas
       const containerHeight = chartContainerRef.current.clientHeight;
       chart = window.LightweightCharts.createChart(chartContainerRef.current, {
         width: chartContainerRef.current.clientWidth,
@@ -111,6 +111,11 @@ export default function ChartsPage() {
         },
         rightPriceScale: {
           borderColor: '#cccccc',
+          visible: true,
+        },
+        leftPriceScale: {
+          borderColor: '#cccccc',
+          visible: true, // Activar escala izquierda
         },
         timeScale: {
           borderColor: '#cccccc',
@@ -121,16 +126,20 @@ export default function ChartsPage() {
 
       console.log('✅ Gráfico creado exitosamente');
 
-      // Agregar series al gráfico
+      // Agregar series al gráfico con escalas alternadas
       const colors = ['#2196F3', '#FF9800', '#4CAF50', '#9C27B0', '#FF5722'];
       
       chartData.forEach((series, index) => {
         try {
+          // Alternar entre escala derecha (right) e izquierda (left)
+          const priceScaleId = index % 2 === 0 ? 'right' : 'left';
+          
           // Crear serie de línea usando la API correcta de TradingView
-          const lineSeries = chart.addSeries(window.LightweightCharts.LineSeries, {
+          const lineSeries = (chart as any).addSeries(window.LightweightCharts.LineSeries, {
             color: colors[index % colors.length],
             lineWidth: 2,
             title: series.ticker,
+            priceScaleId: priceScaleId, // Asignar a escala derecha o izquierda
           });
 
           // Formatear datos para TradingView (usar formato string como el original)
@@ -166,14 +175,14 @@ export default function ChartsPage() {
       const resizeObserver = new ResizeObserver(entries => {
         if (entries.length === 0 || entries[0].target !== chartContainerRef.current) return;
         const newRect = entries[0].contentRect;
-        chart.applyOptions({ width: newRect.width, height: newRect.height });
+        (chart as any).applyOptions({ width: newRect.width, height: newRect.height });
       });
 
       resizeObserver.observe(chartContainerRef.current);
 
       chartInstanceRef.current = chart;
 
-    } catch (chartError) {
+    } catch (chartError: any) {
       console.error('❌ Error creando gráfico:', chartError);
       setError(`Error creando gráfico: ${chartError.message}`);
       return;
@@ -278,29 +287,46 @@ export default function ChartsPage() {
       {/* Controles */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Selección de Series */}
+          {/* Selección de Series MÚLTIPLES */}
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Seleccionar Serie
+              Seleccionar Series (Ctrl/Cmd + Click para múltiples)
             </label>
             <select
+              multiple
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-              value={selectedTickers[0] || ''}
+              style={{ minHeight: '120px' }}
+              value={selectedTickers}
               onChange={(e) => {
-                if (e.target.value) {
-                  setSelectedTickers([e.target.value]);
-                } else {
-                  setSelectedTickers([]);
-                }
+                const options = Array.from(e.target.selectedOptions);
+                const values = options.map(option => option.value);
+                setSelectedTickers(values);
               }}
             >
-              <option value="">Selecciona una serie...</option>
               {filteredSeries.map((series) => (
                 <option key={series.ticker} value={series.ticker}>
                   {series.ticker} - {series.name}
                 </option>
               ))}
             </select>
+            {selectedTickers.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {selectedTickers.map(ticker => (
+                  <span
+                    key={ticker}
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
+                  >
+                    {ticker}
+                    <button
+                      onClick={() => setSelectedTickers(prev => prev.filter(t => t !== ticker))}
+                      className="hover:bg-blue-200 rounded-full p-0.5"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Días */}
@@ -349,17 +375,24 @@ export default function ChartsPage() {
       {chartData.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm">
           <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-start">
-              <div className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-                {chartData.map((series, index) => (
-                  <div key={series.ticker} className="flex items-center gap-2">
-                    <div 
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: ['#2196F3', '#FF9800', '#4CAF50', '#9C27B0', '#FF5722'][index % 5] }}
-                    ></div>
-                    <span>{series.ticker}</span>
-                  </div>
-                ))}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4 text-sm font-medium text-gray-900">
+                {chartData.map((series, index) => {
+                  const scalePosition = index % 2 === 0 ? 'Derecha' : 'Izquierda';
+                  return (
+                    <div key={series.ticker} className="flex items-center gap-2">
+                      <div 
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: ['#2196F3', '#FF9800', '#4CAF50', '#9C27B0', '#FF5722'][index % 5] }}
+                      ></div>
+                      <span>{series.ticker}</span>
+                      <span className="text-xs text-gray-500">({scalePosition})</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="text-xs text-gray-500">
+                📊 Dos escalas independientes
               </div>
             </div>
           </div>

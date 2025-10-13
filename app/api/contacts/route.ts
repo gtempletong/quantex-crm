@@ -18,6 +18,7 @@ export async function GET(request: Request) {
     const emailSent = searchParams.get('emailSent') || '';
     const limit = parseInt(searchParams.get('limit') || '100');
     const regionParam = searchParams.get('region') || '';
+    const sortBy = searchParams.get('sortBy') || 'email_sent_at';
 
     // Debug: verificar variables de entorno
     console.log('Environment check:', {
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
         estado,
         tipo_empresa
       `)
-      .order('id', { ascending: false })
+      .order(sortBy, { ascending: false, nullsLast: true })
       .limit(limit);
 
     // Aplicar filtros
@@ -77,6 +78,34 @@ export async function GET(request: Request) {
         { error: 'Error al obtener contactos', details: error.message },
         { status: 500 }
       );
+    }
+
+    // Obtener fechas del último email enviado desde email_messages
+    const contactIds = (data || []).map((c: any) => c.id);
+    let lastEmailMap = new Map();
+    
+    if (contactIds.length > 0) {
+      const { data: lastEmails, error: emailsError } = await supabase
+        .from('email_messages')
+        .select('contact_id, sent_at, subject, created_at')
+        .eq('direction', 'sent')
+        .in('contact_id', contactIds)
+        .order('sent_at', { ascending: false, nullsLast: true }); // Ordenar por sent_at, fallidos al final
+
+      if (emailsError) {
+        console.error('Error fetching last emails:', emailsError);
+      } else if (lastEmails) {
+        // Mapear la fecha del último email a cada contacto
+        lastEmails.forEach(email => {
+          if (!lastEmailMap.has(email.contact_id)) {
+            lastEmailMap.set(email.contact_id, {
+              sent_at: email.sent_at,
+              status: email.sent_at ? 'sent' : 'failed',
+              created_at: email.created_at
+            });
+          }
+        });
+      }
     }
 
     // Enriquecer con empresas en una segunda consulta por RUT
@@ -114,6 +143,8 @@ export async function GET(request: Request) {
         region_label: regionNumber ? (REGION_MAP[regionNumber as number] || null) : null,
         email_sent: row.email_sent,
         email_sent_at: row.email_sent_at,
+        last_email_sent_at: lastEmailMap.get(row.id)?.sent_at || null, // Usar email_messages como fuente principal
+        last_email_status: lastEmailMap.get(row.id)?.status || null, // Estado del último email
         estado: row.estado,
         tipo_empresa: row.tipo_empresa,
       };
@@ -138,6 +169,40 @@ export async function GET(request: Request) {
       { error: 'Error inesperado', details: message },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * PATCH /api/contacts
+ * Actualiza campos de un contacto (por ahora: estado)
+ * Body JSON: { id: number, estado: 'activo'|'contactado'|'negociacion'|'cerrado'|'descartado' }
+ */
+export async function PATCH(request: Request) {
+  try {
+    const { id, estado } = await request.json();
+
+    const allowed: string[] = ['activo', 'descartado'];
+    if (!id || typeof id !== 'number') {
+      return NextResponse.json({ success: false, error: 'id inválido' }, { status: 400 });
+    }
+    if (!estado || !allowed.includes(String(estado))) {
+      return NextResponse.json({ success: false, error: 'estado inválido' }, { status: 400 });
+    }
+
+    const supabase = getServerSupabase();
+    const { error } = await supabase
+      .from('personas')
+      .update({ estado })
+      .eq('id', id);
+
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Error desconocido';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 

@@ -88,7 +88,12 @@ export async function POST(request: Request) {
     console.log(`📝 Nombre completo: "${persona.nombre_contacto}" → Primer nombre: "${firstName}"`);
 
           // 2. Llamar al modular agent para componer el email con plantilla
-          const modularAgentUrl = process.env.MODULAR_AGENT_URL || 'https://quantex-modular-agent.loca.lt';
+          const modularAgentUrl = process.env.MODULAR_AGENT_URL;
+          
+          if (!modularAgentUrl) {
+            throw new Error('MODULAR_AGENT_URL no configurado en .env.local');
+          }
+
           const composeResponse = await fetch(`${modularAgentUrl}/api/modular-agent/execute-tool`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -144,12 +149,50 @@ export async function POST(request: Request) {
 
     console.log(`  ✅ Email enviado exitosamente a ${persona.email_contacto}`);
 
-    // 4. Actualizar el estado del contacto en Supabase
+    // 4. Registrar en email_messages
+    const sentAt = new Date().toISOString();
+    
+    // Buscar company_id si existe
+    let companyId = null;
+    if (persona.rut_empresa) {
+      const { data: empresa } = await supabase
+        .from('empresas')
+        .select('id')
+        .eq('rut_empresa', persona.rut_empresa)
+        .single();
+      companyId = empresa?.id || null;
+    }
+    
+    const { error: emailMessageError } = await supabase
+      .from('email_messages')
+      .insert({
+        direction: 'sent',
+        contact_id: contactId,
+        company_id: companyId,
+        from_email: '', // Se llenará desde Gmail
+        to_emails: [persona.email_contacto],
+        cc_emails: [],
+        subject: composeResult.subject,
+        body_html: composeResult.html_content,
+        body_text: '',
+        message_id: sendResult.message_id,
+        thread_id: null,
+        sent_at: sentAt,
+        message_kind: 'intro'
+      });
+
+    if (emailMessageError) {
+      console.error('⚠️ Error registrando en email_messages:', emailMessageError);
+    } else {
+      console.log(`  ✅ Email registrado en email_messages`);
+    }
+
+    // 5. Actualizar el estado del contacto en Supabase
     const { error: updateError } = await supabase
       .from('personas')
       .update({
         email_sent: true,
-        email_sent_at: new Date().toISOString()
+        email_sent_at: sentAt
       })
       .eq('id', contactId);
 

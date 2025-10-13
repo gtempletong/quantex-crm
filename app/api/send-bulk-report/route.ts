@@ -46,7 +46,18 @@ export async function POST(request: Request) {
     }
 
     // Llamar al modular agent para enviar emails
-    const modularAgentUrl = process.env.MODULAR_AGENT_URL || 'http://localhost:5003';
+    const modularAgentUrl = process.env.MODULAR_AGENT_URL;
+    
+    if (!modularAgentUrl) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'MODULAR_AGENT_URL no configurado en .env.local' 
+        },
+        { status: 500 }
+      );
+    }
+
     const results = [];
 
     for (const contact of contacts) {

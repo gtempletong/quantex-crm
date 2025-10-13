@@ -21,7 +21,18 @@ export async function POST(request: Request) {
     }
 
     // Llamar al modular agent
-    const modularAgentUrl = process.env.MODULAR_AGENT_URL || 'https://quantex-modular-agent.loca.lt';
+    const modularAgentUrl = process.env.MODULAR_AGENT_URL;
+    
+    if (!modularAgentUrl) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'MODULAR_AGENT_URL no configurado en .env.local' 
+        },
+        { status: 500 }
+      );
+    }
+
     const response = await fetch(`${modularAgentUrl}/api/send-report`, {
       method: 'POST',
       headers: {
@@ -34,11 +45,23 @@ export async function POST(request: Request) {
       })
     });
 
-    const result = await response.json();
-
-    if (!response.ok) {
+    // Manejar respuestas que no sean JSON (e.g., HTML de un túnel/localtunnel)
+    const rawText = await response.text();
+    let result: any = null;
+    try {
+      result = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      // No es JSON; devolver error detallado con fragmento de la respuesta
+      const snippet = rawText?.slice(0, 200) || 'Respuesta vacía del servidor';
       return NextResponse.json(
-        { success: false, error: result.error || 'Error del modular agent' },
+        { success: false, error: `Respuesta no JSON del modular agent (${response.status}): ${snippet}` },
+        { status: response.ok ? 502 : response.status }
+      );
+    }
+
+    if (!response.ok || !result?.success) {
+      return NextResponse.json(
+        { success: false, error: result?.error || `Error del modular agent (${response.status})` },
         { status: response.status }
       );
     }
