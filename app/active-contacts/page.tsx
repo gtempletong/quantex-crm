@@ -181,9 +181,7 @@ export default function ActiveContactsPage() {
     
     try {
       const formData = {
-        ...modalForm,
-        region: modalForm.region ? parseInt(modalForm.region) : null,
-        tags: modalForm.tags ? modalForm.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : []
+        ...modalForm
       };
 
       const url = editingContact 
@@ -812,62 +810,6 @@ export default function ActiveContactsPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Región
-                    </label>
-                    <select
-                      value={modalForm.region}
-                      onChange={(e) => setModalForm(prev => ({ ...prev, region: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Seleccionar región</option>
-                      {Object.entries(REGION_MAP).map(([num, name]) => (
-                        <option key={num} value={num}>{name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Origen
-                    </label>
-                    <select
-                      value={modalForm.source}
-                      onChange={(e) => setModalForm(prev => ({ ...prev, source: e.target.value as 'cliente' | 'prospecto' | 'otro' }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="prospecto">Prospecto</option>
-                      <option value="cliente">Cliente</option>
-                      <option value="otro">Otro</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tags (separados por comas)
-                  </label>
-                  <input
-                    type="text"
-                    value={modalForm.tags}
-                    onChange={(e) => setModalForm(prev => ({ ...prev, tags: e.target.value }))}
-                    placeholder="ej: vip, newsletter, reportes"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notas
-                  </label>
-                  <textarea
-                    value={modalForm.notes}
-                    onChange={(e) => setModalForm(prev => ({ ...prev, notes: e.target.value }))}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4">

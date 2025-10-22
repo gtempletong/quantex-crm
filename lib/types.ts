@@ -51,17 +51,19 @@ export type ContactStatus = 'activo' | 'contactado' | 'negociacion' | 'cerrado' 
 export interface ActiveContact {
   id: string;
   full_name: string | null;
-  email: string | null; // Ahora puede ser null
-  phone: string | null; // Teléfono del contacto
+  email: string | null;
+  phone: string | null;
+  title: string | null; // Cargo/Título
   linkedin_url: string | null;
   company_name: string | null;
-  region: number | null;
-  source: 'cliente' | 'prospecto' | 'otro';
-  notes: string | null;
-  tags: string[] | null;
-  can_receive_communications: boolean;
-  last_communication_sent_at: string | null;
+  company_id: string | null;
+  stage: 'prospect' | 'active_contact' | 'excluir';
+  ai_classification: string | null;
+  ai_score: number | null;
   created_at: string;
   updated_at: string;
+  apollo_companies?: {
+    website: string | null;
+  };
 }
 
