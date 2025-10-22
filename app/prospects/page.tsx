@@ -1,194 +1,430 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
-import { Contact } from '@/lib/types';
+import ProspectModal from '@/components/ProspectModal';
 
-interface LinkedInLead {
-  id: number;
+interface ApolloProspect {
+  id: string;
   full_name: string;
-  company_name: string;
-  title: string;
-  industry: string;
-  location: string;
-  ai_classification: string;
-  ai_score: number;
-  ai_justification: string;
-  linkedin_profile_url: string;
-  airtable_synced: boolean;
-  phantom_status: string;
-  connection_status: string;
-  prospect_stage: string;
-  dm_sent_at: string | null;
-  connection_accepted_at: string | null;
-  last_activity_at: string;
+  email: string | null;
+  phone: string | null;
+  title: string | null;
+  linkedin_url: string | null;
+  company_id: string | null;
+  company_name: string | null;
+  seniority: string | null;
+  linkedin_invite_sent: boolean;
+  linkedin_invite_sent_at: string | null;
+  email_sent: boolean;
+  email_sent_at: string | null;
+  ai_classification: string | null;
+  ai_score: number | null;
+  ai_justification: string | null;
+  ai_analyzed_at: string | null;
+  stage: string | null;
   created_at: string;
+  updated_at: string;
+  apollo_companies?: {
+    website: string | null;
+    ai_analysis_report: string | null;
+    ai_score: number | null;
+    ai_classification: string | null;
+  };
+  // Temporary field for modal editing
+  website_company?: string | null;
 }
 
-// Componente para Email Prospects
-function EmailProspectsTab() {
-  const [contacts, setContacts] = useState<Contact[]>([]);
+interface ProspectStats {
+  total: number;
+}
+
+export default function ProspectsPage() {
+  const [prospects, setProspects] = useState<ApolloProspect[]>([]);
+  const [stats, setStats] = useState<ProspectStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filterEstado, setFilterEstado] = useState('');
-  const [filterEmail, setFilterEmail] = useState('');
-  const [filterRegion, setFilterRegion] = useState('');
-  const [sortBy, setSortBy] = useState('email_sent_at');
-  const [sendingEmail, setSendingEmail] = useState<number | null>(null);
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  
+  // Modal states
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [editingProspect, setEditingProspect] = useState<ApolloProspect | null>(null);
+  
+  // Sorting states
+  const [sortBy, setSortBy] = useState<'name' | 'ai_score' | 'ai_classification' | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  
+  // Filter states
+  const [filterBy, setFilterBy] = useState<'all' | 'has_email' | 'has_linkedin' | 'has_both' | 'has_neither'>('all');
+  
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'prospects' | 'active_contacts'>('prospects');
 
-  // Fetch contactos
-  const fetchContacts = useCallback(async () => {
+  // Fetch prospects
+  const fetchProspects = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (search) params.append('search', search);
-      if (filterEstado) params.append('estado', filterEstado);
-      if (filterEmail) params.append('emailSent', filterEmail);
-      if (filterRegion) params.append('region', filterRegion);
-      if (sortBy) params.append('sortBy', sortBy);
 
-      const response = await fetch(`/api/contacts?${params.toString()}`);
+      const response = await fetch(`/api/prospects?${params.toString()}`);
       const data = await response.json();
 
+      console.log('API Response:', data); // DEBUG
+      console.log('Prospects count:', data.prospects?.length); // DEBUG
+
       if (data.success) {
-        setContacts(data.contacts);
+        setProspects(data.prospects);
+        setStats(data.stats);
+      } else {
+        console.error('API returned error:', data.error); // DEBUG
       }
     } catch (error) {
-      console.error('Error fetching contacts:', error);
+      console.error('Error fetching prospects:', error);
     } finally {
       setLoading(false);
     }
-  }, [search, filterEstado, filterEmail, filterRegion, sortBy]);
-
-  // Función para enviar email intro
-  const handleSendIntro = async (contactId: number, contactName: string) => {
-    setSendingEmail(contactId);
-    try {
-      const response = await fetch('/api/send-intro', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contactId,
-          contactName
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        await fetchContacts();
-        alert('Email enviado exitosamente!');
-      } else {
-        alert(`Error: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('Error sending intro:', error);
-      alert('Error enviando email');
-    } finally {
-      setSendingEmail(null);
-    }
-  };
+  }, [search]);
 
   useEffect(() => {
-    fetchContacts();
-  }, [fetchContacts]);
+    fetchProspects();
+  }, [fetchProspects]);
 
   // Selección de filas
-  const toggleSelect = (id: number) => {
+  const toggleSelect = (id: string) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === contacts.length) {
+    if (selectedIds.length === prospects.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(contacts.map(c => c.id));
+      setSelectedIds(prospects.map(p => p.id));
     }
   };
 
-  const handleSendIntroSelected = async () => {
-    if (selectedIds.length === 0) return;
-    for (const id of selectedIds) {
-      const c = contacts.find(ct => ct.id === id);
-      if (!c || c.email_sent) continue;
-      await handleSendIntro(c.id, c.nombre_contacto || '');
+  // Modal handlers
+  const handleCreateProspect = () => {
+    setModalMode('create');
+    setEditingProspect(null);
+    setIsModalOpen(true);
+  };
+
+  const handleEditProspect = (prospect: ApolloProspect) => {
+    setModalMode('edit');
+    // Include the website from apollo_companies in the prospect data
+    const prospectWithWebsite = {
+      ...prospect,
+      website_company: prospect.apollo_companies?.website || null
+    };
+    setEditingProspect(prospectWithWebsite);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteProspect = async (id: string) => {
+    if (!confirm('¿Estás seguro de que quieres eliminar este prospect?')) {
+      return;
     }
-    setSelectedIds([]);
+
+    try {
+      const response = await fetch(`/api/prospects/${id}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Error al eliminar prospect');
+      }
+
+      // Refresh the list
+      fetchProspects();
+    } catch (error) {
+      console.error('Error deleting prospect:', error);
+      alert('Error al eliminar prospect');
+    }
+  };
+
+  const handleSaveProspect = (savedProspect: ApolloProspect) => {
+    if (modalMode === 'create') {
+      setProspects(prev => [savedProspect, ...prev]);
+    } else {
+      setProspects(prev => prev.map(p => p.id === savedProspect.id ? savedProspect : p));
+    }
+    setIsModalOpen(false);
+  };
+
+  // Mark as Active Contact
+  const handleMarkAsActive = async (prospectId: string) => {
+    if (!confirm('¿Marcar este prospect como Active Contact?')) return;
+    
+    try {
+      const response = await fetch(`/api/prospects/${prospectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: 'active_contact' })
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al actualizar prospect');
+      }
+
+      // Refresh prospects
+      await fetchProspects();
+      alert('✅ Prospect movido a Active Contacts!');
+    } catch (error) {
+      console.error('Error marking as active:', error);
+      alert('Error al marcar como Active Contact');
+    }
+  };
+
+  // Move back to Prospects
+  const handleMarkAsProspect = async (prospectId: string) => {
+    if (!confirm('¿Mover de vuelta a Prospects?')) return;
+    
+    try {
+      const response = await fetch(`/api/prospects/${prospectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: 'prospect' })
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al actualizar prospect');
+      }
+
+      // Refresh prospects
+      await fetchProspects();
+      alert('✅ Movido de vuelta a Prospects!');
+    } catch (error) {
+      console.error('Error moving back:', error);
+      alert('Error al mover a Prospects');
+    }
+  };
+
+  // Sorting functions
+  const handleSort = (field: 'name' | 'ai_score' | 'ai_classification') => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const getFilteredProspects = () => {
+    // First filter by tab (stage)
+    const stageFiltered = activeTab === 'prospects'
+      ? prospects.filter(p => !p.stage || p.stage === 'prospect')
+      : prospects.filter(p => p.stage === 'active_contact');
+    
+    // Then apply contact filters
+    if (filterBy === 'all') return stageFiltered;
+
+    return stageFiltered.filter(prospect => {
+      const hasEmail = !!prospect.email;
+      const hasLinkedIn = !!prospect.linkedin_url;
+
+      switch (filterBy) {
+        case 'has_email':
+          return hasEmail;
+        case 'has_linkedin':
+          return hasLinkedIn;
+        case 'has_both':
+          return hasEmail && hasLinkedIn;
+        case 'has_neither':
+          return !hasEmail && !hasLinkedIn;
+        default:
+          return true;
+      }
+    });
+  };
+
+  const getSortedProspects = () => {
+    const filteredProspects = getFilteredProspects();
+    if (!sortBy) return filteredProspects;
+
+    return [...filteredProspects].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortBy) {
+        case 'name':
+          aValue = a.full_name.toLowerCase();
+          bValue = b.full_name.toLowerCase();
+          break;
+        case 'ai_score':
+          aValue = a.ai_score || 0;
+          bValue = b.ai_score || 0;
+          break;
+        case 'ai_classification':
+          // Order: INCLUIR > REVISAR > EXCLUIR
+          const classificationOrder = { 'INCLUIR': 3, 'REVISAR': 2, 'EXCLUIR': 1 };
+          aValue = classificationOrder[a.ai_classification as keyof typeof classificationOrder] || 0;
+          bValue = classificationOrder[b.ai_classification as keyof typeof classificationOrder] || 0;
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
+  // Helper para determinar colores de estado
+  const getConnectionStatusColor = (status: string | null) => {
+    switch (status) {
+      case 'conectado': return 'bg-green-100 text-green-800';
+      case 'pendiente': return 'bg-yellow-100 text-yellow-800';
+      case 'rechazado': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getPhantomStatusColor = (status: string | null) => {
+    switch (status) {
+      case 'solicitud_enviada': return 'bg-blue-100 text-blue-800';
+      case 'en_cola': return 'bg-yellow-100 text-yellow-800';
+      case 'completado': return 'bg-green-100 text-green-800';
+      case 'fallido': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getAIClassificationColor = (classification: string | null) => {
+    switch (classification) {
+      case 'INCLUIR': return 'bg-green-100 text-green-800';
+      case 'REVISAR': return 'bg-yellow-100 text-yellow-800';
+      case 'EXCLUIR': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
   };
 
   return (
-    <div className="space-y-4">
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <input
-            type="text"
-            placeholder="Buscar por nombre o email..."
-            className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <select
-            className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            value={filterEstado}
-            onChange={(e) => setFilterEstado(e.target.value)}
+    <div className="p-6">
+      {/* Header */}
+      <div className="mb-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Gestión de Prospects</h1>
+            <p className="text-gray-600">Prospects calificados (LinkedIn) + Prospects con email (Apollo.io)</p>
+          </div>
+          <button
+            onClick={handleCreateProspect}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
           >
-            <option value="">Todos los estados</option>
-            <option value="activo">Activo</option>
-            <option value="descartado">Descartado</option>
-          </select>
-          <select
-            className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            value={filterEmail}
-            onChange={(e) => setFilterEmail(e.target.value)}
-          >
-            <option value="">Emails: Todos</option>
-            <option value="true">Emails: Enviados</option>
-            <option value="false">Emails: No Enviados</option>
-          </select>
-          <select
-            className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            value={filterRegion}
-            onChange={(e) => setFilterRegion(e.target.value)}
-          >
-            <option value="">Región: Todas</option>
-            <option value="13">Región Metropolitana</option>
-          </select>
-          <select
-            className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-          >
-            <option value="email_sent_at">Ordenar: Fecha Email</option>
-            <option value="nombre_contacto">Ordenar: Nombre</option>
-            <option value="created_at">Ordenar: Fecha Creación</option>
-            <option value="id">Ordenar: ID</option>
-          </select>
-        </div>
-        <div className="mt-2 text-sm text-gray-600">
-          Total: <span className="font-semibold">{contacts.length}</span> contactos
+            + Nuevo Prospect
+          </button>
         </div>
       </div>
 
-      {/* Acciones masivas */}
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-600">Seleccionados: <span className="font-semibold">{selectedIds.length}</span></div>
-        <div className="space-x-2">
+      {/* Tabs */}
+      <div className="mb-6">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+            <button
+              onClick={() => setActiveTab('prospects')}
+              className={`${
+                activeTab === 'prospects'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition`}
+            >
+              📋 Prospects
+              <span className={`ml-2 py-0.5 px-2 rounded-full text-xs ${
+                activeTab === 'prospects' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
+              }`}>
+                {prospects.filter(p => !p.stage || p.stage === 'prospect').length}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('active_contacts')}
+              className={`${
+                activeTab === 'active_contacts'
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition`}
+            >
+              ✅ Active Contacts
+              <span className={`ml-2 py-0.5 px-2 rounded-full text-xs ${
+                activeTab === 'active_contacts' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
+              }`}>
+                {prospects.filter(p => p.stage === 'active_contact').length}
+              </span>
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+        <input
+          type="text"
+          placeholder="Buscar por nombre, email o empresa..."
+          className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="mt-2 text-sm text-gray-600">
+          Mostrando: <span className="font-semibold">{getSortedProspects().length}</span> prospects
+        </div>
+      </div>
+
+      {/* Filter Buttons */}
+      <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+        <div className="flex flex-wrap gap-2">
+          <span className="text-sm font-medium text-gray-700 mr-2">Filtrar por canal:</span>
           <button
-            onClick={handleSendIntroSelected}
-            disabled={selectedIds.length === 0 || sendingEmail !== null}
-            className={`px-3 py-2 text-sm font-medium rounded-md ${selectedIds.length === 0 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+            onClick={() => setFilterBy('all')}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+              filterBy === 'all' 
+                ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
           >
-            Enviar Intro a seleccionados
+            📋 Todos ({prospects.length})
           </button>
           <button
-            onClick={() => setSelectedIds([])}
-            className="px-3 py-2 text-sm font-medium rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
+            onClick={() => setFilterBy('has_email')}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+              filterBy === 'has_email' 
+                ? 'bg-green-100 text-green-800 border border-green-200' 
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
           >
-            Limpiar selección
+            📧 Con Email ({prospects.filter(p => p.email).length})
+          </button>
+          <button
+            onClick={() => setFilterBy('has_linkedin')}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+              filterBy === 'has_linkedin' 
+                ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            🔗 Con LinkedIn ({prospects.filter(p => p.linkedin_url).length})
+          </button>
+          <button
+            onClick={() => setFilterBy('has_both')}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+              filterBy === 'has_both' 
+                ? 'bg-purple-100 text-purple-800 border border-purple-200' 
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            🎯 Ambos ({prospects.filter(p => p.email && p.linkedin_url).length})
+          </button>
+          <button
+            onClick={() => setFilterBy('has_neither')}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+              filterBy === 'has_neither' 
+                ? 'bg-red-100 text-red-800 border border-red-200' 
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            ❌ Sin Contacto ({prospects.filter(p => !p.email && !p.linkedin_url).length})
           </button>
         </div>
       </div>
@@ -197,11 +433,11 @@ function EmailProspectsTab() {
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         {loading ? (
           <div className="p-12 text-center text-gray-500">
-            ⏳ Cargando contactos...
+            ⏳ Cargando prospects...
           </div>
-        ) : contacts.length === 0 ? (
+        ) : prospects.length === 0 ? (
           <div className="p-12 text-center text-gray-500">
-            No se encontraron contactos
+            No se encontraron prospects calificados
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -209,110 +445,246 @@ function EmailProspectsTab() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3">
-                    <input type="checkbox" aria-label="Seleccionar todos" checked={contacts.length>0 && selectedIds.length===contacts.length} onChange={toggleSelectAll} />
+                    <input 
+                      type="checkbox" 
+                      aria-label="Seleccionar todos" 
+                      checked={prospects.length > 0 && selectedIds.length === prospects.length} 
+                      onChange={toggleSelectAll} 
+                    />
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nombre
+                    <div className="flex items-center space-x-2">
+                      <span>Nombre / Empresa</span>
+                      <button
+                        onClick={() => handleSort('name')}
+                        className="text-gray-400 hover:text-gray-600 text-xs"
+                        title={`Ordenar por nombre ${sortBy === 'name' ? (sortOrder === 'asc' ? '↓' : '↑') : '↕'}`}
+                      >
+                        {sortBy === 'name' ? (sortOrder === 'asc' ? '↓' : '↑') : '↕'}
+                      </button>
+                    </div>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cargo
+                    LinkedIn
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Email
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Empresa
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
-                    Región
+                    <div className="flex items-center space-x-2">
+                      <span>IA Score</span>
+                      <div className="flex flex-col space-y-1">
+                        <button
+                          onClick={() => handleSort('ai_score')}
+                          className="text-gray-400 hover:text-gray-600 text-xs"
+                          title={`Ordenar por score ${sortBy === 'ai_score' ? (sortOrder === 'asc' ? '↓' : '↑') : '↕'}`}
+                        >
+                          {sortBy === 'ai_score' ? (sortOrder === 'asc' ? '↓' : '↑') : '↕'}
+                        </button>
+                        <button
+                          onClick={() => handleSort('ai_classification')}
+                          className="text-gray-400 hover:text-gray-600 text-xs"
+                          title={`Ordenar por clasificación ${sortBy === 'ai_classification' ? (sortOrder === 'asc' ? '↓' : '↑') : '↕'}`}
+                        >
+                          {sortBy === 'ai_classification' ? (sortOrder === 'asc' ? '↓' : '↑') : '↕'}
+                        </button>
+                      </div>
+                    </div>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Estado
+                    Análisis IA Empresa
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email Enviado
+                    Acciones
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {contacts.map((contact) => (
-                  <tr key={contact.id} className="hover:bg-gray-50 transition">
+                {getSortedProspects().map((prospect) => (
+                  <tr key={prospect.id} className="hover:bg-gray-50 transition">
                     <td className="px-4 py-4">
-                      <input type="checkbox" checked={selectedIds.includes(contact.id)} onChange={() => toggleSelect(contact.id)} aria-label={`Seleccionar ${contact.nombre_contacto}`} />
+                      <input 
+                        type="checkbox" 
+                        checked={selectedIds.includes(prospect.id)} 
+                        onChange={() => toggleSelect(prospect.id)} 
+                        aria-label={`Seleccionar ${prospect.full_name}`} 
+                      />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4">
                       <div className="text-sm font-medium text-gray-900">
-                        {contact.nombre_contacto}
+                        {prospect.full_name}
                       </div>
+                      <div className="text-sm text-gray-500">
+                        {prospect.title || '-'}
+                      </div>
+                      <div className="text-sm font-medium text-gray-700 mt-1">
+                        {prospect.company_name}
+                      </div>
+                      {prospect.seniority && (
+                        <div className="text-xs text-gray-400 mt-0.5">
+                          {prospect.seniority}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {contact.cargo_contacto || '-'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-normal break-words max-w-[220px]">
-                      <div className="text-sm text-gray-900" title={contact.email_contacto || ''}>
-                        {contact.email_contacto || '-'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-normal break-words max-w-[220px]">
-                      <div className="text-sm text-gray-900" title={contact.razon_social || contact.rut_empresa}>
-                        {contact.razon_social || '-'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap hidden md:table-cell">
-                      <div className="text-sm text-gray-900">
-                        {contact.region_label || (contact.region_number === 13 ? 'Región Metropolitana' : contact.region_number || '-')}
-                      </div>
+                      {prospect.linkedin_invite_sent ? (
+                        <span className="text-xs font-medium text-green-600">✓ Enviado</span>
+                      ) : (
+                        <span className="text-xs text-gray-400">⏳ Pendiente</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <select
-                        className="p-1 border border-gray-300 rounded text-sm"
-                        value={contact.estado || ''}
-                        onChange={async (e) => {
-                          const newEstado = e.target.value;
-                          try {
-                            const res = await fetch('/api/contacts', {
-                              method: 'PATCH',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ id: contact.id, estado: newEstado })
-                            });
-                            const result = await res.json();
-                            if (!result.success) throw new Error(result.error || 'Error actualizando estado');
-                            // Refrescar lista
-                            fetchContacts();
-                          } catch (err) {
-                            console.error('Error updating estado:', err);
-                            alert('Error actualizando estado');
-                          }
-                        }}
-                      >
-                        <option value="">Sin estado</option>
-                        <option value="activo">Activo</option>
-                        <option value="descartado">Descartado</option>
-                      </select>
+                      {prospect.email_sent ? (
+                        <span className="text-xs font-medium text-green-600">✓ Enviado</span>
+                      ) : (
+                        <span className="text-xs text-gray-400">⏳ Pendiente</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        {contact.email_sent ? (
-                          <span className="text-green-600 font-medium">✓ Sí</span>
-                        ) : (
-                          <span className="text-gray-400">✗ No</span>
+                      <div className="flex flex-col space-y-1">
+                        {prospect.ai_classification && (
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getAIClassificationColor(prospect.ai_classification)}`}>
+                            {prospect.ai_classification}
+                          </span>
                         )}
-                        {contact.last_email_sent_at && (
-                          <div className="text-xs text-gray-400 mt-1">
-                            {new Date(contact.last_email_sent_at).toLocaleDateString('es-CL')}
-                          </div>
+                        {prospect.ai_score !== null && (
+                          <span className="text-xs text-gray-600">
+                            Score: {prospect.ai_score}/100
+                          </span>
                         )}
-                        {contact.last_email_status && (
-                          <div className="text-xs mt-1">
-                            {contact.last_email_status === 'failed' ? (
-                              <span className="text-red-500">❌ Falló</span>
-                            ) : (
-                              <span className="text-green-500">✅ Enviado</span>
+                        {prospect.ai_analyzed_at && (
+                          <span className="text-xs text-gray-400">
+                            {new Date(prospect.ai_analyzed_at).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="max-w-lg">
+                        {prospect.apollo_companies?.ai_analysis_report ? (
+                          <div className="space-y-2">
+                            {/* Header with company classification */}
+                            {prospect.apollo_companies.ai_classification && (
+                              <div className="flex items-center space-x-2 mb-2">
+                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getAIClassificationColor(prospect.apollo_companies.ai_classification)}`}>
+                                  🏢 {prospect.apollo_companies.ai_classification}
+                                </span>
+                                {prospect.apollo_companies.ai_score !== null && (
+                                  <span className="text-xs font-semibold text-gray-700">
+                                    {prospect.apollo_companies.ai_score}/100
+                                  </span>
+                                )}
+                              </div>
                             )}
+                            
+                            {/* Analysis report in a scrollable box */}
+                            <details className="group">
+                              <summary className="cursor-pointer text-xs font-medium text-blue-600 hover:text-blue-800 list-none flex items-center space-x-1">
+                                <span className="group-open:hidden">📄 Ver análisis completo →</span>
+                                <span className="hidden group-open:inline">📄 Ocultar análisis ↑</span>
+                              </summary>
+                              <div className="mt-2 text-xs text-gray-700 whitespace-pre-wrap max-h-48 overflow-y-auto border border-gray-300 rounded-lg p-3 bg-gradient-to-br from-gray-50 to-white shadow-sm">
+                                {prospect.apollo_companies.ai_analysis_report}
+                              </div>
+                            </details>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs text-gray-400 italic">⚠️ Sin análisis disponible</span>
                           </div>
                         )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex flex-col space-y-2">
+                        {/* Action buttons */}
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleEditProspect(prospect)}
+                            className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                            title="Editar"
+                          >
+                            ✏️ Editar
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProspect(prospect.id)}
+                            className="text-red-600 hover:text-red-800 text-xs font-medium"
+                            title="Eliminar"
+                          >
+                            🗑️ Eliminar
+                          </button>
+                        </div>
+                        
+                        {/* Stage change button */}
+                        <div>
+                          {activeTab === 'prospects' ? (
+                            <button
+                              onClick={() => handleMarkAsActive(prospect.id)}
+                              className="text-green-600 hover:text-green-800 text-xs font-medium"
+                              title="Marcar como Active Contact"
+                            >
+                              ✅ Mark as Active
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleMarkAsProspect(prospect.id)}
+                              className="text-orange-600 hover:text-orange-800 text-xs font-medium"
+                              title="Mover de vuelta a Prospects"
+                            >
+                              ↩️ Move to Prospects
+                            </button>
+                          )}
+                        </div>
+                        
+                        {/* Contact links */}
+                        <div className="flex space-x-2">
+                          {prospect.apollo_companies?.website && (
+                            <a
+                              href={prospect.apollo_companies.website.startsWith('http') 
+                                ? prospect.apollo_companies.website 
+                                : `https://${prospect.apollo_companies.website}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-orange-600 hover:text-orange-800 text-xs font-medium"
+                              title="Ver Website"
+                            >
+                              🌐 Website
+                            </a>
+                          )}
+                          {prospect.linkedin_url && (
+                            <a
+                              href={prospect.linkedin_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                              title="Ver LinkedIn"
+                            >
+                              🔗 LinkedIn
+                            </a>
+                          )}
+                          {prospect.email && (
+                            <a
+                              href={`https://mail.google.com/mail/?view=cm&fs=1&to=${prospect.email}&su=&body=&bcc=&cc=&from=gavintempleton@gavintempleton.net`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-green-600 hover:text-green-800 text-xs font-medium"
+                              title="Enviar Email desde Gmail"
+                            >
+                              📧 Email
+                            </a>
+                          )}
+                          {prospect.phone && (
+                            <a
+                              href={`https://wa.me/${prospect.phone.replace(/[^0-9]/g, '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-purple-600 hover:text-purple-800 text-xs font-medium"
+                              title="WhatsApp"
+                            >
+                              📞 WhatsApp
+                            </a>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -322,307 +694,15 @@ function EmailProspectsTab() {
           </div>
         )}
       </div>
-    </div>
-  );
-}
 
-export default function ProspectsPage() {
-  const [activeTab, setActiveTab] = useState<'email' | 'linkedin'>('email');
-         const [linkedinLeads, setLinkedinLeads] = useState<LinkedInLead[]>([]);
-         const [loading, setLoading] = useState(true);
-         const [filter, setFilter] = useState<'all' | 'INCLUIR' | 'DESCARTAR'>('all');
-         const [phantomFilter, setPhantomFilter] = useState<'all' | 'En Cola' | 'Solicitud Enviada' | 'Completado'>('all');
-         const [connectionFilter, setConnectionFilter] = useState<'all' | 'No Conectado' | 'Conectado' | 'Perdido'>('all');
-
-  // Fetch LinkedIn leads
-  const fetchLinkedinLeads = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (filter !== 'all') {
-        params.append('filter', filter);
-      }
-      if (phantomFilter !== 'all') {
-        params.append('phantomFilter', phantomFilter);
-      }
-      if (connectionFilter !== 'all') {
-        params.append('connectionFilter', connectionFilter);
-      }
-      const response = await fetch(`/api/linkedin-leads?${params.toString()}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setLinkedinLeads(data.leads);
-      }
-    } catch (error) {
-      console.error('Error fetching LinkedIn leads:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (activeTab === 'linkedin') {
-      fetchLinkedinLeads();
-    }
-  }, [activeTab, filter, phantomFilter, connectionFilter]);
-
-  const filteredLeads = linkedinLeads.filter(lead => {
-    if (filter !== 'all' && lead.ai_classification !== filter) return false;
-    if (phantomFilter !== 'all' && lead.phantom_status !== phantomFilter) return false;
-    if (connectionFilter !== 'all' && lead.connection_status !== connectionFilter) return false;
-    return true;
-  });
-
-  const getClassificationColor = (classification: string) => {
-    switch (classification) {
-      case 'INCLUIR': return 'bg-green-100 text-green-800';
-      case 'DESCARTAR': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score >= 4) return 'text-green-600';
-    if (score >= 3) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const getPhantomStatusColor = (status: string) => {
-    switch (status) {
-      case 'Solicitud Enviada': return 'bg-green-100 text-green-800';
-      case 'En Cola': return 'bg-yellow-100 text-yellow-800';
-      case 'Completado': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getConnectionStatusColor = (status: string) => {
-    switch (status) {
-      case 'Conectado': return 'bg-green-100 text-green-800';
-      case 'No Conectado': return 'bg-gray-100 text-gray-800';
-      case 'Perdido': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Prospects</h1>
-        <p className="text-gray-600">Gestiona tus prospects de email y LinkedIn</p>
-      </div>
-
-      {/* Tabs */}
-      <div className="mb-6">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab('email')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'email'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              📧 Prospects Email
-            </button>
-            <button
-              onClick={() => setActiveTab('linkedin')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'linkedin'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              🔗 Prospects LinkedIn
-            </button>
-          </nav>
-        </div>
-      </div>
-
-      {/* Content */}
-      {activeTab === 'email' ? (
-        <EmailProspectsTab />
-      ) : (
-        <div className="space-y-4">
-          {/* Filters */}
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Clasificación IA */}
-              <div>
-                <label htmlFor="classification-filter" className="block text-sm font-medium text-gray-700 mb-1">
-                  Clasificación IA
-                </label>
-                <select
-                  id="classification-filter"
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value as 'all' | 'INCLUIR' | 'DESCARTAR')}
-                >
-                  <option value="all">Todas las clasificaciones</option>
-                  <option value="INCLUIR">INCLUIR</option>
-                  <option value="DESCARTAR">DESCARTAR</option>
-                </select>
-              </div>
-
-              {/* Phantom Status */}
-              <div>
-                <label htmlFor="phantom-filter" className="block text-sm font-medium text-gray-700 mb-1">
-                  Phantom Status
-                </label>
-                <select
-                  id="phantom-filter"
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  value={phantomFilter}
-                  onChange={(e) => setPhantomFilter(e.target.value as 'all' | 'En Cola' | 'Solicitud Enviada' | 'Completado')}
-                >
-                  <option value="all">Todos los estados</option>
-                  <option value="En Cola">En Cola</option>
-                  <option value="Solicitud Enviada">Solicitud Enviada</option>
-                  <option value="Completado">Completado</option>
-                </select>
-              </div>
-
-              {/* Connection Status */}
-              <div>
-                <label htmlFor="connection-filter" className="block text-sm font-medium text-gray-700 mb-1">
-                  Estado Conexión
-                </label>
-                <select
-                  id="connection-filter"
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  value={connectionFilter}
-                  onChange={(e) => setConnectionFilter(e.target.value as 'all' | 'No Conectado' | 'Conectado' | 'Perdido')}
-                >
-                  <option value="all">Todos los estados</option>
-                  <option value="No Conectado">No Conectado</option>
-                  <option value="Conectado">Conectado</option>
-                  <option value="Perdido">Perdido</option>
-                </select>
-              </div>
-            </div>
-            <div className="mt-4 flex justify-between items-center">
-              <div className="text-sm text-gray-600">
-                Mostrando: <span className="font-semibold">{filteredLeads.length}</span> de <span className="font-semibold">{linkedinLeads.length}</span> leads
-              </div>
-              <button
-                onClick={() => {
-                  setFilter('all');
-                  setPhantomFilter('all');
-                  setConnectionFilter('all');
-                }}
-                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-              >
-                Limpiar filtros
-              </button>
-            </div>
-          </div>
-
-          {/* LinkedIn Leads Table */}
-          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-            {loading ? (
-              <div className="p-12 text-center text-gray-500">
-                ⏳ Cargando prospects de LinkedIn...
-              </div>
-            ) : filteredLeads.length === 0 ? (
-              <div className="p-12 text-center text-gray-500">
-                No se encontraron prospects de LinkedIn
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Nombre
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Empresa
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        IA Score
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Clasificación
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Phantom Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Conexión
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Acciones
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredLeads.map((lead) => (
-                      <tr key={lead.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">
-                            {lead.full_name}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {lead.location}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {lead.company_name}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {lead.industry}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`text-lg font-bold ${getScoreColor(lead.ai_score)}`}>
-                            {lead.ai_score}/5
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getClassificationColor(lead.ai_classification)}`}>
-                            {lead.ai_classification}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPhantomStatusColor(lead.phantom_status)}`}>
-                            {lead.phantom_status || 'En Cola'}
-                          </span>
-                          {lead.dm_sent_at && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              {new Date(lead.dm_sent_at).toLocaleDateString('es-CL')}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getConnectionStatusColor(lead.connection_status)}`}>
-                            {lead.connection_status || 'No Conectado'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex space-x-2">
-                            <a
-                              href={lead.linkedin_profile_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 text-sm"
-                            >
-                              Ver LinkedIn
-                            </a>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Modal */}
+      <ProspectModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        prospect={editingProspect}
+        onSave={handleSaveProspect}
+        mode={modalMode}
+      />
     </div>
   );
 }

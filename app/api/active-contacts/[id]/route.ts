@@ -23,9 +23,18 @@ export async function GET(request: Request, { params }: RouteParams) {
     const supabase = getServerSupabase();
 
     const { data: contact, error } = await supabase
-      .from('active_contacts')
-      .select('*')
+      .from('apollo_persons')
+      .select(`
+        *,
+        apollo_companies!left(
+          website,
+          ai_analysis_report,
+          ai_score,
+          ai_classification
+        )
+      `)
       .eq('id', id)
+      .eq('stage', 'active_contact')
       .single();
 
     if (error) {
@@ -105,9 +114,10 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     // Si se está actualizando el email, verificar que no exista otro contacto con el mismo email
     if (email) {
       const { data: existingContact } = await supabase
-        .from('active_contacts')
+        .from('apollo_persons')
         .select('id')
         .eq('email', email)
+        .eq('stage', 'active_contact')
         .neq('id', id)
         .single();
 
@@ -119,28 +129,33 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       }
     }
 
-    // Preparar datos de actualización
+    // Preparar datos de actualización (solo campos que existen en apollo_persons)
     const updateData: any = {};
     
     if (full_name !== undefined) updateData.full_name = full_name;
-    if (email !== undefined) updateData.email = email && email.trim() !== '' ? email : null; // Convertir string vacío a null
-    if (phone !== undefined) updateData.phone = phone && phone.trim() !== '' ? phone : null; // Convertir string vacío a null
+    if (email !== undefined) updateData.email = email && email.trim() !== '' ? email : null;
+    if (phone !== undefined) updateData.phone = phone && phone.trim() !== '' ? phone : null;
+    if (body.title !== undefined) updateData.title = body.title || null;
     if (linkedin_url !== undefined) updateData.linkedin_url = linkedin_url;
     if (company_name !== undefined) updateData.company_name = company_name;
-    if (region !== undefined) updateData.region = region ? parseInt(region) : null;
-    if (source !== undefined) updateData.source = source;
-    if (notes !== undefined) updateData.notes = notes;
-    if (tags !== undefined) updateData.tags = tags;
-    if (can_receive_communications !== undefined) updateData.can_receive_communications = can_receive_communications;
-    if (last_communication_sent_at !== undefined) updateData.last_communication_sent_at = last_communication_sent_at;
+    // Nota: region, source, notes, tags, can_receive_communications, last_communication_sent_at ya no existen
 
     // Actualizar contacto
     const { data: updatedContact, error } = await supabase
-      .from('active_contacts')
+      .from('apollo_persons')
       .update(updateData)
       .eq('id', id)
+      .eq('stage', 'active_contact')
       .select()
       .single();
+
+    // Si se proporciona website_company y el contacto tiene company_id, actualizar apollo_companies
+    if (body.website_company !== undefined && updatedContact?.company_id) {
+      await supabase
+        .from('apollo_companies')
+        .update({ website: body.website_company || null })
+        .eq('id', updatedContact.company_id);
+    }
 
     if (error) {
       if (error.code === 'PGRST116') {
@@ -189,9 +204,10 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     // Verificar que el contacto existe antes de eliminarlo
     const { data: existingContact, error: fetchError } = await supabase
-      .from('active_contacts')
+      .from('apollo_persons')
       .select('id, email')
       .eq('id', id)
+      .eq('stage', 'active_contact')
       .single();
 
     if (fetchError) {
@@ -209,10 +225,10 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       );
     }
 
-    // Eliminar contacto
+    // Eliminar contacto (o mejor: mover de vuelta a prospects)
     const { error } = await supabase
-      .from('active_contacts')
-      .delete()
+      .from('apollo_persons')
+      .update({ stage: 'prospect' })  // Mejor que eliminar, lo movemos de vuelta
       .eq('id', id);
 
     if (error) {

@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { recipients, report_html, subject } = body;
+    const { recipients, report_topic, subject } = body;
 
     if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
       return NextResponse.json(
@@ -13,9 +13,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!report_html) {
+    if (!report_topic) {
       return NextResponse.json(
-        { success: false, error: 'Contenido HTML del reporte requerido' },
+        { success: false, error: 'Tópico del reporte requerido' },
         { status: 400 }
       );
     }
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         recipients,
-        report_html,
+        report_topic,
         subject: subject || 'Reporte Quantex'
       })
     });

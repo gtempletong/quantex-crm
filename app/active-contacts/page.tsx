@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Filter, Edit2, Trash2, Mail, Eye, Users, X } from 'lucide-react';
+import { Plus, Search, Filter, Edit2, Trash2, Mail, AtSign, Linkedin, Users, X } from 'lucide-react';
 import { ActiveContact } from '@/lib/types';
 
 interface ActiveContactsResponse {
@@ -36,6 +36,15 @@ export default function ActiveContactsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState({
+    totalContacts: 0,
+    canReceive: 0,
+    clients: 0,
+    prospects: 0,
+    withEmail: 0,
+    withLinkedIn: 0,
+    withBoth: 0
+  });
   
   // Filtros
   const [search, setSearch] = useState('');
@@ -59,14 +68,24 @@ export default function ActiveContactsPage() {
     full_name: '',
     email: '',
     phone: '',
+    title: '',
     linkedin_url: '',
     company_name: '',
-    region: '',
-    source: 'prospecto' as 'cliente' | 'prospecto' | 'otro',
-    notes: '',
-    tags: '',
-    can_receive_communications: true
+    website_company: '',
   });
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const response = await fetch('/api/active-contacts/stats');
+      const result = await response.json();
+      
+      if (result.success) {
+        setStats(result.data);
+      }
+    } catch (err) {
+      console.error('Error fetching stats:', err);
+    }
+  }, []);
 
   const fetchContacts = useCallback(async () => {
     try {
@@ -101,8 +120,9 @@ export default function ActiveContactsPage() {
   }, [search, sourceFilter, regionFilter, canReceiveFilter, currentPage, limit]);
 
   useEffect(() => {
+    fetchStats();
     fetchContacts();
-  }, [fetchContacts]);
+  }, [fetchStats, fetchContacts]);
 
   const handleSearch = (value: string) => {
     setSearch(value);
@@ -131,13 +151,10 @@ export default function ActiveContactsPage() {
         full_name: contact.full_name || '',
         email: contact.email || '',
         phone: contact.phone || '',
+        title: contact.title || '',
         linkedin_url: contact.linkedin_url || '',
         company_name: contact.company_name || '',
-        region: contact.region?.toString() || '',
-        source: contact.source,
-        notes: contact.notes || '',
-        tags: Array.isArray(contact.tags) ? contact.tags.join(', ') : '',
-        can_receive_communications: contact.can_receive_communications
+        website_company: (contact as any).apollo_companies?.website || '',
       });
     } else {
       setEditingContact(null);
@@ -145,13 +162,10 @@ export default function ActiveContactsPage() {
         full_name: '',
         email: '',
         phone: '',
+        title: '',
         linkedin_url: '',
         company_name: '',
-        region: '',
-        source: 'prospecto',
-        notes: '',
-        tags: '',
-        can_receive_communications: true
+        website_company: '',
       });
     }
     setShowModal(true);
@@ -229,7 +243,7 @@ export default function ActiveContactsPage() {
 
   const selectAllForReport = () => {
     const contactsWithEmail = contacts.filter(contact => 
-      contact.email && contact.can_receive_communications
+      contact.email
     );
     setSelectedForReport(contactsWithEmail.map(c => c.id));
   };
@@ -247,8 +261,7 @@ export default function ActiveContactsPage() {
     // Filtrar solo los contactos seleccionados que tienen email
     const selectedContacts = contacts.filter(contact => 
       selectedForReport.includes(contact.id) && 
-      contact.email && 
-      contact.can_receive_communications
+      contact.email
     );
     
     if (selectedContacts.length === 0) {
@@ -280,7 +293,7 @@ export default function ActiveContactsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           recipients,
-          report_html: report.full_content,
+          report_topic: reportType,  // Enviar el tópico en lugar del HTML
           subject: report.display_title
         })
       });
@@ -334,9 +347,9 @@ export default function ActiveContactsPage() {
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
-                  {contacts.filter(c => c.can_receive_communications).length}
+                  {contacts.filter(c => c.email).length}
                 </div>
-                <div className="text-xs text-gray-500">Pueden Recibir</div>
+                <div className="text-xs text-gray-500">Con Email</div>
               </div>
             </div>
           </div>
@@ -457,7 +470,6 @@ export default function ActiveContactsPage() {
             <option value="all">Todos los orígenes</option>
             <option value="cliente">Cliente</option>
             <option value="prospecto">Prospecto</option>
-            <option value="otro">Otro</option>
           </select>
 
           {/* Filtro Región */}
@@ -472,15 +484,16 @@ export default function ActiveContactsPage() {
             ))}
           </select>
 
-          {/* Filtro Can Receive */}
+          {/* Filtro Método de Contacto */}
           <select
             value={canReceiveFilter}
             onChange={(e) => handleFilterChange('canReceive', e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
-            <option value="all">Todos</option>
-            <option value="true">Puede recibir</option>
-            <option value="false">No puede recibir</option>
+            <option value="all">Todos los métodos</option>
+            <option value="email">Email</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="both">Ambos</option>
           </select>
         </div>
       </div>
@@ -494,35 +507,31 @@ export default function ActiveContactsPage() {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Contactos</p>
-              <p className="text-2xl font-bold text-gray-900">{total}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalContacts}</p>
             </div>
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <div className="flex items-center">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <Eye className="h-6 w-6 text-green-600" />
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <AtSign className="h-6 w-6 text-orange-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Pueden Recibir</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {contacts.filter(c => c.can_receive_communications).length}
-              </p>
+              <p className="text-sm font-medium text-gray-600">Con Email</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.withEmail}</p>
             </div>
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <div className="flex items-center">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <Filter className="h-6 w-6 text-purple-600" />
+            <div className="p-2 bg-cyan-100 rounded-lg">
+              <Linkedin className="h-6 w-6 text-cyan-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Clientes</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {contacts.filter(c => c.source === 'cliente').length}
-              </p>
+              <p className="text-sm font-medium text-gray-600">Con LinkedIn</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.withLinkedIn}</p>
             </div>
           </div>
         </div>
@@ -555,12 +564,12 @@ export default function ActiveContactsPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       <input
                         type="checkbox"
-                        checked={selectedForReport.length > 0 && selectedForReport.length === contacts.filter(c => c.email && c.can_receive_communications).length}
+                        checked={selectedForReport.length > 0 && selectedForReport.length === contacts.filter(c => c.email).length}
                         onChange={() => {
-                          if (selectedForReport.length === contacts.filter(c => c.email && c.can_receive_communications).length) {
+                          if (selectedForReport.length === contacts.filter(c => c.email).length) {
                             clearReportSelection();
                           } else {
                             selectAllForReport();
@@ -570,7 +579,7 @@ export default function ActiveContactsPage() {
                       />
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contacto
+                      NOMBRE / EMPRESA
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Email
@@ -580,21 +589,6 @@ export default function ActiveContactsPage() {
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       LinkedIn
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Empresa
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Región
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Origen
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Estado
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Última Comunicación
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky right-0 bg-gray-50">
                       Acciones
@@ -609,7 +603,7 @@ export default function ActiveContactsPage() {
                           type="checkbox"
                           checked={selectedForReport.includes(contact.id)}
                           onChange={() => toggleReportSelection(contact.id)}
-                          disabled={!contact.email || !contact.can_receive_communications}
+                          disabled={!contact.email}
                           className="rounded border-gray-300 disabled:opacity-50"
                         />
                       </td>
@@ -617,11 +611,31 @@ export default function ActiveContactsPage() {
                         <div className="text-sm font-medium text-gray-900">
                           {contact.full_name || 'Sin nombre'}
                         </div>
+                        {contact.title && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {contact.title}
+                          </div>
+                        )}
+                        {contact.company_name && (
+                          <div className="text-xs text-blue-600 mt-1">
+                            {contact.company_name}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {contact.email || 'Sin email'}
-                        </div>
+                        {contact.email ? (
+                          <a 
+                            href={`https://mail.google.com/mail/?view=cm&fs=1&to=${contact.email}&su=&body=&bcc=&cc=&from=gavintempleton@gavintempleton.net`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 text-sm underline"
+                            title="Enviar email desde Gmail"
+                          >
+                            {contact.email}
+                          </a>
+                        ) : (
+                          <span className="text-gray-400 text-sm">Sin email</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
@@ -641,40 +655,6 @@ export default function ActiveContactsPage() {
                         ) : (
                           <span className="text-gray-400 text-sm">-</span>
                         )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{contact.company_name || '-'}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {contact.region ? REGION_MAP[contact.region] || `Región ${contact.region}` : '-'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          contact.source === 'cliente' 
-                            ? 'bg-green-100 text-green-800'
-                            : contact.source === 'prospecto'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {contact.source}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          contact.can_receive_communications
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {contact.can_receive_communications ? 'Activo' : 'Inactivo'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {contact.last_communication_sent_at 
-                          ? new Date(contact.last_communication_sent_at).toLocaleDateString('es-CL')
-                          : 'Nunca'
-                        }
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium sticky right-0 bg-white">
                         <div className="flex space-x-2">
@@ -784,6 +764,19 @@ export default function ActiveContactsPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Cargo/Título (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={modalForm.title || ''}
+                      onChange={(e) => setModalForm(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="CEO, Director, Gerente, etc."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       LinkedIn URL
                     </label>
                     <input
@@ -803,6 +796,19 @@ export default function ActiveContactsPage() {
                       type="text"
                       value={modalForm.company_name}
                       onChange={(e) => setModalForm(prev => ({ ...prev, company_name: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Website Empresa
+                    </label>
+                    <input
+                      type="url"
+                      value={modalForm.website_company}
+                      onChange={(e) => setModalForm(prev => ({ ...prev, website_company: e.target.value }))}
+                      placeholder="https://empresa.com"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
@@ -836,19 +842,6 @@ export default function ActiveContactsPage() {
                       <option value="cliente">Cliente</option>
                       <option value="otro">Otro</option>
                     </select>
-                  </div>
-
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="can_receive"
-                      checked={modalForm.can_receive_communications}
-                      onChange={(e) => setModalForm(prev => ({ ...prev, can_receive_communications: e.target.checked }))}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                    />
-                    <label htmlFor="can_receive" className="ml-2 block text-sm text-gray-700">
-                      Puede recibir comunicaciones
-                    </label>
                   </div>
                 </div>
 

@@ -15,36 +15,66 @@ export async function GET(request: Request) {
 
     const supabase = getServerSupabase();
 
-    // Construir query base
-    let query = supabase
-      .from('active_contacts')
-      .select('*')
+    // Construir query base para datos - AHORA USA apollo_persons con stage = 'active_contact'
+    let dataQuery = supabase
+      .from('apollo_persons')
+      .select(`
+        *,
+        apollo_companies!left(
+          website,
+          ai_analysis_report,
+          ai_score,
+          ai_classification
+        )
+      `)
+      .eq('stage', 'active_contact')
       .order('created_at', { ascending: false });
 
-    // Aplicar filtros
-    if (source && source !== 'all') {
-      query = query.eq('source', source);
-    }
+    // Construir query base para conteo
+    let countQuery = supabase
+      .from('apollo_persons')
+      .select('*', { count: 'exact', head: true })
+      .eq('stage', 'active_contact');
 
-    if (region && region !== 'all') {
-      query = query.eq('region', parseInt(region));
-    }
-
+    // Aplicar filtros a ambas queries
+    // Nota: source y region ya no existen en apollo_persons, se removieron
+    
     if (canReceive && canReceive !== 'all') {
-      query = query.eq('can_receive_communications', canReceive === 'true');
+      if (canReceive === 'email') {
+        // Solo contactos con email
+        dataQuery = dataQuery.not('email', 'is', null).neq('email', '');
+        countQuery = countQuery.not('email', 'is', null).neq('email', '');
+      } else if (canReceive === 'linkedin') {
+        // Solo contactos con LinkedIn
+        dataQuery = dataQuery.not('linkedin_url', 'is', null).neq('linkedin_url', '');
+        countQuery = countQuery.not('linkedin_url', 'is', null).neq('linkedin_url', '');
+      } else if (canReceive === 'both') {
+        // Contactos con email Y LinkedIn
+        dataQuery = dataQuery
+          .not('email', 'is', null).neq('email', '')
+          .not('linkedin_url', 'is', null).neq('linkedin_url', '');
+        countQuery = countQuery
+          .not('email', 'is', null).neq('email', '')
+          .not('linkedin_url', 'is', null).neq('linkedin_url', '');
+      }
     }
 
     if (search) {
-      query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,company_name.ilike.%${search}%`);
+      dataQuery = dataQuery.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,company_name.ilike.%${search}%`);
+      countQuery = countQuery.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,company_name.ilike.%${search}%`);
     }
 
-    // Aplicar paginación
-    query = query.range(offset, offset + limit - 1);
+    // Aplicar paginación solo a la query de datos
+    dataQuery = dataQuery.range(offset, offset + limit - 1);
 
-    const { data: contacts, error, count } = await query;
+    // Ejecutar ambas queries
+    const [{ data: contacts, error }, { count, error: countError }] = await Promise.all([
+      dataQuery,
+      countQuery
+    ]);
 
-    if (error) {
-      console.error('Error fetching active contacts:', error);
+    if (error || countError) {
+      console.error('Error fetching active contacts:', error || countError);
       return NextResponse.json(
         { success: false, error: 'Error obteniendo contactos activos' },
         { status: 500 }
@@ -57,6 +87,10 @@ export async function GET(request: Request) {
       total: count || 0,
       limit,
       offset
+    }, {
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8'
+      }
     });
 
   } catch (error: unknown) {
@@ -114,9 +148,10 @@ export async function POST(request: Request) {
     // Verificar si el email ya existe (solo si email no es null)
     if (email) {
       const { data: existingContact } = await supabase
-        .from('active_contacts')
+        .from('apollo_persons')
         .select('id')
         .eq('email', email)
+        .eq('stage', 'active_contact')
         .single();
 
       if (existingContact) {
@@ -127,21 +162,65 @@ export async function POST(request: Request) {
       }
     }
 
-    // Crear nuevo contacto
+    // Step 1: Handle company creation/lookup if company_name is provided
+    let companyId = null;
+    
+    if (company_name) {
+      // Try to find existing company by name
+      const { data: existingCompany } = await supabase
+        .from('apollo_companies')
+        .select('id')
+        .ilike('name', company_name)
+        .limit(1)
+        .single();
+
+      if (existingCompany) {
+        // Company exists, use its ID
+        companyId = existingCompany.id;
+        
+        // Update website if provided
+        if (body.website_company) {
+          await supabase
+            .from('apollo_companies')
+            .update({ website: body.website_company })
+            .eq('id', existingCompany.id);
+        }
+      } else {
+        // Company doesn't exist, create it
+        const { data: newCompany } = await supabase
+          .from('apollo_companies')
+          .insert([{
+            name: company_name,
+            website: body.website_company || null,
+          }])
+          .select()
+          .single();
+
+        if (newCompany) {
+          companyId = newCompany.id;
+        }
+      }
+    }
+
+    // Step 2: Create person with company_id and stage = 'active_contact'
+    const insertData: any = {
+      full_name,
+      email: email && email.trim() !== '' ? email : null,
+      phone: phone && phone.trim() !== '' ? phone : null,
+      title: body.title || null,
+      company_id: companyId,
+      company_name,
+      stage: 'active_contact',
+    };
+
+    // Only include linkedin_url if it's not empty
+    if (linkedin_url && linkedin_url.trim() !== '') {
+      insertData.linkedin_url = linkedin_url;
+    }
+
     const { data: newContact, error } = await supabase
-      .from('active_contacts')
-      .insert({
-        full_name,
-        email: email && email.trim() !== '' ? email : null, // Convertir string vacío a null
-        phone: phone && phone.trim() !== '' ? phone : null, // Convertir string vacío a null
-        linkedin_url,
-        company_name,
-        region: region ? parseInt(region) : null,
-        source: source || 'prospecto',
-        notes,
-        tags: tags || [],
-        can_receive_communications
-      })
+      .from('apollo_persons')
+      .insert(insertData)
       .select()
       .single();
 
