@@ -81,9 +81,54 @@ export async function GET(request: Request) {
       );
     }
 
+    // Obtener fechas del último email enviado desde email_messages
+    const contactIds = (contacts || []).map((c: any) => c.id);
+    let lastEmailMap = new Map();
+    
+    if (contactIds.length > 0) {
+      const { data: lastEmails, error: emailsError } = await supabase
+        .from('email_messages')
+        .select('contact_id, sent_at')
+        .eq('direction', 'sent')
+        .in('contact_id', contactIds)
+        .order('sent_at', { ascending: false, nullsLast: true });
+
+      if (!emailsError && lastEmails) {
+        // Agrupar por contact_id y tomar el más reciente
+        lastEmails.forEach((email: any) => {
+          if (!lastEmailMap.has(email.contact_id)) {
+            lastEmailMap.set(email.contact_id, { sent_at: email.sent_at });
+          }
+        });
+      }
+      
+      // También verificar email_sent_at directamente en apollo_persons como respaldo
+      const { data: personsWithEmail, error: personsError } = await supabase
+        .from('apollo_persons')
+        .select('id, email_sent_at')
+        .in('id', contactIds)
+        .not('email_sent_at', 'is', null);
+      
+      if (!personsError && personsWithEmail) {
+        personsWithEmail.forEach((person: any) => {
+          // Solo usar si no hay registro en email_messages o si es más reciente
+          const existing = lastEmailMap.get(person.id);
+          if (!existing || !existing.sent_at || new Date(person.email_sent_at) > new Date(existing.sent_at)) {
+            lastEmailMap.set(person.id, { sent_at: person.email_sent_at });
+          }
+        });
+      }
+    }
+
+    // Agregar last_email_sent_at a cada contacto
+    const contactsWithEmail = (contacts || []).map((contact: any) => ({
+      ...contact,
+      last_email_sent_at: lastEmailMap.get(contact.id)?.sent_at || null
+    }));
+
     return NextResponse.json({
       success: true,
-      data: contacts as ActiveContact[],
+      data: contactsWithEmail as ActiveContact[],
       total: count || 0,
       limit,
       offset

@@ -15,6 +15,9 @@ interface Prospect {
   ai_classification: string | null;
   ai_score: number | null;
   ai_justification: string | null;
+  // Company classification fields
+  company_ai_classification?: string | null;
+  company_ai_score?: number | null;
   // Outreach tracking fields
   email_sent: boolean;
   email_sent_at: string | null;
@@ -43,6 +46,8 @@ export default function ProspectModal({ isOpen, onClose, prospect, onSave, mode 
     ai_classification: 'REVISAR',
     ai_score: null,
     ai_justification: '',
+    company_ai_classification: 'REVISAR',
+    company_ai_score: null,
     email_sent: false,
     email_sent_at: null,
     linkedin_invite_sent: false,
@@ -68,6 +73,8 @@ export default function ProspectModal({ isOpen, onClose, prospect, onSave, mode 
           ai_classification: prospect.ai_classification || 'REVISAR',
           ai_score: prospect.ai_score || null,
           ai_justification: prospect.ai_justification || '',
+          company_ai_classification: (prospect as any).company_ai_classification || 'REVISAR',
+          company_ai_score: (prospect as any).company_ai_score || null,
           email_sent: prospect.email_sent || false,
           email_sent_at: prospect.email_sent_at || null,
           linkedin_invite_sent: prospect.linkedin_invite_sent || false,
@@ -86,6 +93,8 @@ export default function ProspectModal({ isOpen, onClose, prospect, onSave, mode 
           ai_classification: 'REVISAR',
           ai_score: null,
           ai_justification: '',
+          company_ai_classification: 'REVISAR',
+          company_ai_score: null,
           email_sent: false,
           email_sent_at: null,
           linkedin_invite_sent: false,
@@ -114,6 +123,7 @@ export default function ProspectModal({ isOpen, onClose, prospect, onSave, mode 
         seniority: formData.seniority || null,
         ai_score: formData.ai_score || null,
         ai_justification: formData.ai_justification || null,
+        company_ai_score: formData.company_ai_score || null,
         email_sent: formData.email_sent,
         email_sent_at: formData.email_sent_at,
         linkedin_invite_sent: formData.linkedin_invite_sent,
@@ -288,11 +298,26 @@ export default function ProspectModal({ isOpen, onClose, prospect, onSave, mode 
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Clasificación IA
+                  Clasificación IA (Persona)
                 </label>
                 <select
                   value={formData.ai_classification || 'REVISAR'}
                   onChange={(e) => handleChange('ai_classification', e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="INCLUIR">INCLUIR</option>
+                  <option value="REVISAR">REVISAR</option>
+                  <option value="EXCLUIR">EXCLUIR</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Clasificación IA (Empresa)
+                </label>
+                <select
+                  value={formData.company_ai_classification || 'REVISAR'}
+                  onChange={(e) => handleChange('company_ai_classification', e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="INCLUIR">INCLUIR</option>
@@ -306,7 +331,7 @@ export default function ProspectModal({ isOpen, onClose, prospect, onSave, mode 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Score IA (0-100)
+                  Score IA Persona (0-100)
                 </label>
                 <input
                   type="number"
@@ -314,6 +339,20 @@ export default function ProspectModal({ isOpen, onClose, prospect, onSave, mode 
                   max="100"
                   value={formData.ai_score || ''}
                   onChange={(e) => handleChange('ai_score', e.target.value ? parseInt(e.target.value) : null)}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Score IA Empresa (0-100)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={formData.company_ai_score || ''}
+                  onChange={(e) => handleChange('company_ai_score', e.target.value ? parseInt(e.target.value) : null)}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>

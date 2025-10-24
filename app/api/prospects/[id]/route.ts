@@ -53,6 +53,27 @@ export async function PUT(
         .eq('id', data.company_id);
     }
 
+    // If AI classification or score is updated, also update the company
+    if (data?.company_id && (body.ai_classification !== undefined || body.ai_score !== undefined || body.company_ai_classification !== undefined || body.company_ai_score !== undefined)) {
+      const companyUpdateData: any = {};
+      // Use company-specific fields if provided, otherwise use person fields
+      if (body.company_ai_classification !== undefined) {
+        companyUpdateData.ai_classification = body.company_ai_classification;
+      } else if (body.ai_classification !== undefined) {
+        companyUpdateData.ai_classification = body.ai_classification;
+      }
+      if (body.company_ai_score !== undefined) {
+        companyUpdateData.ai_score = body.company_ai_score;
+      } else if (body.ai_score !== undefined) {
+        companyUpdateData.ai_score = body.ai_score;
+      }
+      
+      await supabase
+        .from('apollo_companies')
+        .update(companyUpdateData)
+        .eq('id', data.company_id);
+    }
+
     if (error) {
       console.error('Error updating prospect:', error);
       return NextResponse.json(

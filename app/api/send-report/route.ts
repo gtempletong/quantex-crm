@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
+import { spawn } from 'child_process';
+import path from 'path';
 
-// POST /api/send-report - Enviar reporte masivo via modular agent
+// POST /api/send-report - Enviar reporte masivo usando script Python standalone
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { recipients, report_topic, subject } = body;
+    const { recipients, report_topic } = body;
 
     if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
       return NextResponse.json(
@@ -20,55 +22,73 @@ export async function POST(request: Request) {
       );
     }
 
-    // Llamar al modular agent
-    const modularAgentUrl = process.env.MODULAR_AGENT_URL;
+    // Path al script Python
+    const scriptPath = path.join(
+      process.cwd(), '..', 'quantex', 'scripts', 'send_report_emails.py'
+    );
     
-    if (!modularAgentUrl) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'MODULAR_AGENT_URL no configurado en .env.local' 
-        },
-        { status: 500 }
-      );
-    }
+    // Path al Python del venv
+    const pythonPath = path.join(
+      process.cwd(), '..', 'venv', 'Scripts', 'python.exe'
+    );
 
-    const response = await fetch(`${modularAgentUrl}/api/send-report`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        recipients,
-        report_topic,
-        subject: subject || 'Reporte Quantex'
-      })
-    });
+    return new Promise((resolve) => {
+      const pythonProcess = spawn(pythonPath, [scriptPath]);
+      
+      let outputData = '';
+      let errorData = '';
 
-    // Manejar respuestas que no sean JSON (e.g., HTML de un túnel/localtunnel)
-    const rawText = await response.text();
-    let result: any = null;
-    try {
-      result = rawText ? JSON.parse(rawText) : null;
-    } catch {
-      // No es JSON; devolver error detallado con fragmento de la respuesta
-      const snippet = rawText?.slice(0, 200) || 'Respuesta vacía del servidor';
-      return NextResponse.json(
-        { success: false, error: `Respuesta no JSON del modular agent (${response.status}): ${snippet}` },
-        { status: response.ok ? 502 : response.status }
-      );
-    }
+      // Enviar datos al script vía stdin
+      pythonProcess.stdin.write(JSON.stringify({ recipients, report_topic }));
+      pythonProcess.stdin.end();
 
-    if (!response.ok || !result?.success) {
-      return NextResponse.json(
-        { success: false, error: result?.error || `Error del modular agent (${response.status})` },
-        { status: response.status }
-      );
-    }
+      // Capturar output
+      pythonProcess.stdout.on('data', (data) => {
+        outputData += data.toString();
+      });
 
-    return NextResponse.json({
-      success: true,
-      data: result
+      pythonProcess.stderr.on('data', (data) => {
+        errorData += data.toString();
+        // Stderr contiene los logs del script (mensajes informativos)
+        console.log('[Python Script]:', data.toString());
+      });
+
+      pythonProcess.on('close', (code) => {
+        if (code !== 0) {
+          console.error('Error ejecutando script Python:', errorData);
+          resolve(NextResponse.json({
+            success: false,
+            error: 'Error enviando emails'
+          }, { status: 500 }));
+        } else {
+          try {
+            // Limpiar outputData: solo tomar la última línea que debería ser el JSON
+            const lines = outputData.trim().split('\n');
+            const jsonLine = lines[lines.length - 1];
+            
+            const result = JSON.parse(jsonLine);
+            resolve(NextResponse.json({
+              success: true,
+              data: result
+            }));
+          } catch (parseError) {
+            console.error('Error parseando resultado del script:', parseError);
+            console.error('Output completo:', outputData);
+            resolve(NextResponse.json({
+              success: false,
+              error: 'Error procesando respuesta del script'
+            }, { status: 500 }));
+          }
+        }
+      });
+
+      pythonProcess.on('error', (error) => {
+        console.error('Error spawnando proceso Python:', error);
+        resolve(NextResponse.json({
+          success: false,
+          error: 'Error ejecutando script Python'
+        }, { status: 500 }));
+      });
     });
 
   } catch (error: unknown) {

@@ -62,8 +62,14 @@ export interface ActiveContact {
   ai_score: number | null;
   created_at: string;
   updated_at: string;
+  last_email_sent_at?: string | null; // Último email enviado desde email_messages
   apollo_companies?: {
     website: string | null;
+    ai_analysis_report?: string | null;
+    ai_score?: number | null;
+    ai_classification?: string | null;
+    name?: string;
+    industry?: string | null;
   };
 }
 

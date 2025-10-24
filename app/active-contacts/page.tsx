@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Search, Filter, Edit2, Trash2, Mail, AtSign, Linkedin, Users, X } from 'lucide-react';
 import { ActiveContact } from '@/lib/types';
 
@@ -73,6 +73,19 @@ export default function ActiveContactsPage() {
     company_name: '',
     website_company: '',
   });
+
+  // Email modal states
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailContact, setEmailContact] = useState<ActiveContact | null>(null);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [emailAttachments, setEmailAttachments] = useState<File[]>([]);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const emailBodyRef = useRef<HTMLDivElement>(null);
+
+  // AI Analysis modal states
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [aiAnalysisContact, setAIAnalysisContact] = useState<ActiveContact | null>(null);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -174,6 +187,112 @@ export default function ActiveContactsPage() {
   const closeModal = () => {
     setShowModal(false);
     setEditingContact(null);
+  };
+
+  // Email modal handlers
+  const handleOpenEmailModal = (contact: ActiveContact) => {
+    setEmailContact(contact);
+    setEmailSubject('');
+    setEmailBody('');
+    setEmailAttachments([]);
+    setIsEmailModalOpen(true);
+    // Limpiar el contenido del editor después de que el modal se abra
+    setTimeout(() => {
+      if (emailBodyRef.current) {
+        emailBodyRef.current.innerHTML = '';
+      }
+    }, 0);
+  };
+
+  const handleCloseEmailModal = () => {
+    setIsEmailModalOpen(false);
+    setEmailContact(null);
+    setEmailSubject('');
+    setEmailBody('');
+    setEmailAttachments([]);
+  };
+
+  const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setEmailAttachments(Array.from(e.target.files));
+    }
+  };
+
+  const handleRemoveAttachment = (index: number) => {
+    setEmailAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const formatText = (command: string) => {
+    document.execCommand(command, false);
+  };
+
+  const insertLink = () => {
+    const url = prompt('Ingresa la URL:');
+    if (url) {
+      document.execCommand('createLink', false, url);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!emailContact || !emailContact.email) {
+      alert('El contacto no tiene email registrado');
+      return;
+    }
+
+    // Obtener el contenido del editor
+    const bodyContent = emailBodyRef.current?.innerHTML || '';
+
+    if (!emailSubject.trim() || !bodyContent.trim()) {
+      alert('Por favor completa el asunto y el mensaje');
+      return;
+    }
+
+    setSendingEmail(true);
+
+    try {
+      // Crear FormData para enviar archivos
+      const formData = new FormData();
+      formData.append('contactId', emailContact.id);
+      formData.append('to', emailContact.email);
+      formData.append('subject', emailSubject);
+      formData.append('body', bodyContent);
+      
+      // Agregar attachments si existen
+      emailAttachments.forEach((file) => {
+        formData.append('attachments', file);
+      });
+
+      const response = await fetch('/api/send-contact-email', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Error al enviar email');
+      }
+
+      alert('✅ Email enviado exitosamente');
+      handleCloseEmailModal();
+      fetchContacts(); // Refresh para actualizar estado
+    } catch (error) {
+      console.error('Error sending email:', error);
+      alert('❌ Error al enviar email: ' + (error instanceof Error ? error.message : 'Error desconocido'));
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
+  // AI Analysis modal handlers
+  const handleOpenAIModal = (contact: ActiveContact) => {
+    setAIAnalysisContact(contact);
+    setIsAIModalOpen(true);
+  };
+
+  const handleCloseAIModal = () => {
+    setIsAIModalOpen(false);
+    setAIAnalysisContact(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -320,7 +439,7 @@ export default function ActiveContactsPage() {
     <div className="bg-gray-50 min-h-screen">
       {/* CRM Header */}
       <header className="bg-white shadow-lg border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
             {/* Logo y título */}
             <div className="flex items-center space-x-4">
@@ -355,7 +474,7 @@ export default function ActiveContactsPage() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="px-4 sm:px-6 lg:px-8 py-8">
         {/* Header de la página */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -588,6 +707,12 @@ export default function ActiveContactsPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       LinkedIn
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Website
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Email Enviado
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky right-0 bg-gray-50">
                       Acciones
                     </th>
@@ -654,8 +779,82 @@ export default function ActiveContactsPage() {
                           <span className="text-gray-400 text-sm">-</span>
                         )}
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {contact.apollo_companies?.website ? (
+                          <a 
+                            href={contact.apollo_companies.website} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 text-sm flex items-center space-x-1"
+                          >
+                            <span>🌐</span>
+                            <span>Ver sitio</span>
+                          </a>
+                        ) : (
+                          <span className="text-gray-400 text-sm">-</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {contact.last_email_sent_at ? (
+                          <div className="flex flex-col space-y-1">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-green-600" title="Email enviado">✅</span>
+                              <span className="text-xs text-gray-600 font-medium">
+                                {new Date(contact.last_email_sent_at).toLocaleDateString('es-CL', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric'
+                                })}
+                              </span>
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              {new Date(contact.last_email_sent_at).toLocaleTimeString('es-CL', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-sm">-</span>
+                        )}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium sticky right-0 bg-white">
                         <div className="flex space-x-2">
+                          {/* Email */}
+                          {contact.email && (
+                            <button
+                              onClick={() => handleOpenEmailModal(contact)}
+                              className="text-green-600 hover:text-green-900"
+                              title="Enviar Email"
+                            >
+                              <Mail size={16} />
+                            </button>
+                          )}
+                          
+                          {/* Website */}
+                          {(contact as any).apollo_companies?.website && (
+                            <a
+                              href={(contact as any).apollo_companies.website}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-purple-600 hover:text-purple-900"
+                              title="Ver Website"
+                            >
+                              🌐
+                            </a>
+                          )}
+                          
+                          {/* AI Analysis */}
+                          {(contact as any).apollo_companies?.ai_analysis_report && (
+                            <button
+                              onClick={() => handleOpenAIModal(contact)}
+                              className="text-indigo-600 hover:text-indigo-900"
+                              title="Ver Análisis AI"
+                            >
+                              🤖
+                            </button>
+                          )}
+                          
                           <button
                             onClick={() => openModal(contact)}
                             className="text-blue-600 hover:text-blue-900"
@@ -671,8 +870,7 @@ export default function ActiveContactsPage() {
                             <Trash2 size={16} />
                           </button>
                         </div>
-                      </td>
-                    </tr>
+                      </td>                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -828,6 +1026,279 @@ export default function ActiveContactsPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Modal */}
+      {isEmailModalOpen && emailContact && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  Enviar Email
+                </h3>
+                <button
+                  onClick={handleCloseEmailModal}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Recipient Info */}
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600">
+                  <span className="font-medium">Para:</span> {emailContact.full_name}
+                </p>
+                <p className="text-sm text-gray-600">
+                  <span className="font-medium">Email:</span> {emailContact.email}
+                </p>
+                {emailContact.company_name && (
+                  <p className="text-sm text-gray-600">
+                    <span className="font-medium">Empresa:</span> {emailContact.company_name}
+                  </p>
+                )}
+              </div>
+
+              {/* Subject */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Asunto
+                </label>
+                <input
+                  type="text"
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  placeholder="Asunto del email"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={sendingEmail}
+                />
+              </div>
+
+              {/* Body with Formatting Toolbar */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Mensaje
+                </label>
+                
+                {/* Formatting Toolbar */}
+                <div className="flex items-center space-x-2 mb-2 p-2 bg-gray-50 border border-gray-300 rounded-t-lg">
+                  <button
+                    type="button"
+                    onClick={() => formatText('bold')}
+                    className="px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm font-bold"
+                    disabled={sendingEmail}
+                    title="Negrita"
+                  >
+                    B
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => formatText('italic')}
+                    className="px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm italic"
+                    disabled={sendingEmail}
+                    title="Cursiva"
+                  >
+                    I
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => formatText('underline')}
+                    className="px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm underline"
+                    disabled={sendingEmail}
+                    title="Subrayado"
+                  >
+                    U
+                  </button>
+                  <div className="w-px h-6 bg-gray-300"></div>
+                  <button
+                    type="button"
+                    onClick={() => formatText('insertUnorderedList')}
+                    className="px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm"
+                    disabled={sendingEmail}
+                    title="Lista"
+                  >
+                    • Lista
+                  </button>
+                  <button
+                    type="button"
+                    onClick={insertLink}
+                    className="px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100 text-sm"
+                    disabled={sendingEmail}
+                    title="Insertar Link"
+                  >
+                    🔗 Link
+                  </button>
+                </div>
+
+                {/* Rich Text Editor */}
+                <div
+                  ref={emailBodyRef}
+                  contentEditable={!sendingEmail}
+                  className="w-full min-h-[250px] px-3 py-2 border border-t-0 border-gray-300 rounded-b-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:outline-none resize-y overflow-auto bg-white"
+                  style={{ maxHeight: '400px' }}
+                  spellCheck={true}
+                  lang="es"
+                  suppressContentEditableWarning={true}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  ✓ Corrección ortográfica activada (español)
+                </p>
+              </div>
+
+              {/* Attachments */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Adjuntos
+                </label>
+                <div className="flex items-center space-x-3">
+                  <label className="cursor-pointer px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2">
+                    <span>📎 Adjuntar archivo</span>
+                    <input
+                      type="file"
+                      multiple
+                      onChange={handleAttachmentChange}
+                      className="hidden"
+                      disabled={sendingEmail}
+                    />
+                  </label>
+                  {emailAttachments.length > 0 && (
+                    <span className="text-sm text-gray-600">
+                      {emailAttachments.length} archivo(s) seleccionado(s)
+                    </span>
+                  )}
+                </div>
+                
+                {/* Lista de archivos adjuntos */}
+                {emailAttachments.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {emailAttachments.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm text-gray-600">📄</span>
+                          <span className="text-sm text-gray-800">{file.name}</span>
+                          <span className="text-xs text-gray-500">
+                            ({(file.size / 1024).toFixed(1)} KB)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAttachment(index)}
+                          className="text-red-600 hover:text-red-800 text-sm"
+                          disabled={sendingEmail}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* From Info */}
+              <div className="mb-4 text-sm text-gray-600">
+                <p>
+                  <span className="font-medium">Desde:</span> gavintempleton@gavintempleton.net
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={handleCloseEmailModal}
+                  disabled={sendingEmail}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSendEmail}
+                  disabled={sendingEmail}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {sendingEmail ? 'Enviando...' : '📧 Enviar Email'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Analysis Modal */}
+      {isAIModalOpen && aiAnalysisContact && (aiAnalysisContact as any).apollo_companies && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  Análisis AI - {(aiAnalysisContact as any).apollo_companies.name}
+                </h3>
+                <button
+                  onClick={handleCloseAIModal}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Company Info */}
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Empresa</p>
+                    <p className="text-base text-gray-900">{(aiAnalysisContact as any).apollo_companies.name}</p>
+                  </div>
+                  {(aiAnalysisContact as any).apollo_companies.industry && (
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Industria</p>
+                      <p className="text-base text-gray-900">{(aiAnalysisContact as any).apollo_companies.industry}</p>
+                    </div>
+                  )}
+                  {(aiAnalysisContact as any).apollo_companies.ai_classification && (
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Clasificación AI</p>
+                      <p className="text-base text-gray-900">
+                        <span className={`px-2 py-1 rounded ${
+                          (aiAnalysisContact as any).apollo_companies.ai_classification === 'High Priority' ? 'bg-green-100 text-green-800' :
+                          (aiAnalysisContact as any).apollo_companies.ai_classification === 'Medium Priority' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {(aiAnalysisContact as any).apollo_companies.ai_classification}
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                  {(aiAnalysisContact as any).apollo_companies.ai_score && (
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Score AI</p>
+                      <p className="text-base text-gray-900">{(aiAnalysisContact as any).apollo_companies.ai_score}/100</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* AI Analysis Report */}
+              <div className="prose max-w-none">
+                <h4 className="text-lg font-semibold text-gray-900 mb-3">Reporte de Análisis</h4>
+                <div className="whitespace-pre-wrap text-gray-700 bg-white p-4 border border-gray-200 rounded-lg">
+                  {(aiAnalysisContact as any).apollo_companies.ai_analysis_report || 'No hay análisis disponible'}
+                </div>
+              </div>
+
+              {/* Close Button */}
+              <div className="flex justify-end mt-6">
+                <button
+                  onClick={handleCloseAIModal}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                >
+                  Cerrar
+                </button>
+              </div>
             </div>
           </div>
         </div>
