@@ -29,7 +29,6 @@ export async function GET(request: Request) {
         linkedin_url,
         company_id,
         company_name,
-        seniority,
         linkedin_invite_sent,
         linkedin_invite_sent_at,
         email_sent,

@@ -11,7 +11,6 @@ interface Prospect {
   linkedin_url: string | null;
   company_name: string | null;
   website_company: string | null;
-  seniority: string | null;
   ai_classification: string | null;
   ai_score: number | null;
   ai_justification: string | null;
@@ -69,7 +68,6 @@ export default function ProspectModal({ isOpen, onClose, prospect, onSave, mode 
           linkedin_url: prospect.linkedin_url || '',
           company_name: prospect.company_name || '',
           website_company: prospect.website_company || '',
-          seniority: prospect.seniority || '',
           ai_classification: prospect.ai_classification || 'REVISAR',
           ai_score: prospect.ai_score || null,
           ai_justification: prospect.ai_justification || '',
@@ -89,7 +87,6 @@ export default function ProspectModal({ isOpen, onClose, prospect, onSave, mode 
           linkedin_url: '',
           company_name: '',
           website_company: '',
-          seniority: '',
           ai_classification: 'REVISAR',
           ai_score: null,
           ai_justification: '',
@@ -120,9 +117,10 @@ export default function ProspectModal({ isOpen, onClose, prospect, onSave, mode 
         linkedin_url: formData.linkedin_url || null,
         company_name: formData.company_name || null,
         website_company: formData.website_company || null,
-        seniority: formData.seniority || null,
+        ai_classification: formData.ai_classification || 'REVISAR',
         ai_score: formData.ai_score || null,
         ai_justification: formData.ai_justification || null,
+        company_ai_classification: formData.company_ai_classification || 'REVISAR',
         company_ai_score: formData.company_ai_score || null,
         email_sent: formData.email_sent,
         email_sent_at: formData.email_sent_at,
@@ -279,22 +277,6 @@ export default function ProspectModal({ isOpen, onClose, prospect, onSave, mode 
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Seniority
-                </label>
-                <select
-                  value={formData.seniority || ''}
-                  onChange={(e) => handleChange('seniority', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Seleccionar...</option>
-                  <option value="entry">Entry Level</option>
-                  <option value="mid">Mid Level</option>
-                  <option value="senior">Senior Level</option>
-                  <option value="executive">Executive</option>
-                </select>
-              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -337,8 +319,8 @@ export default function ProspectModal({ isOpen, onClose, prospect, onSave, mode 
                   type="number"
                   min="0"
                   max="100"
-                  value={formData.ai_score || ''}
-                  onChange={(e) => handleChange('ai_score', e.target.value ? parseInt(e.target.value) : null)}
+                  value={formData.ai_score !== null && formData.ai_score !== undefined ? formData.ai_score : ''}
+                  onChange={(e) => handleChange('ai_score', e.target.value !== '' ? parseInt(e.target.value) : null)}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
@@ -351,8 +333,8 @@ export default function ProspectModal({ isOpen, onClose, prospect, onSave, mode 
                   type="number"
                   min="0"
                   max="100"
-                  value={formData.company_ai_score || ''}
-                  onChange={(e) => handleChange('company_ai_score', e.target.value ? parseInt(e.target.value) : null)}
+                  value={formData.company_ai_score !== null && formData.company_ai_score !== undefined ? formData.company_ai_score : ''}
+                  onChange={(e) => handleChange('company_ai_score', e.target.value !== '' ? parseInt(e.target.value) : null)}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>

@@ -11,8 +11,6 @@ interface ApolloProspect {
   title: string | null;
   linkedin_url: string | null;
   company_id: string | null;
-  company_name: string | null;
-  seniority: string | null;
   linkedin_invite_sent: boolean;
   linkedin_invite_sent_at: string | null;
   email_sent: boolean;
@@ -25,12 +23,14 @@ interface ApolloProspect {
   created_at: string;
   updated_at: string;
   apollo_companies?: {
+    name: string | null;  // Source of truth for company name
     website: string | null;
     ai_analysis_report: string | null;
     ai_score: number | null;
     ai_classification: string | null;
   };
-  // Temporary field for modal editing
+  // Temporary fields for modal editing
+  company_name?: string | null;  // For editing, will update apollo_companies.name
   website_company?: string | null;
 }
 
@@ -121,9 +121,10 @@ export default function ProspectsPage() {
 
   const handleEditProspect = (prospect: ApolloProspect) => {
     setModalMode('edit');
-    // Include the website and company classification from apollo_companies
+    // Include company data from apollo_companies (source of truth)
     const prospectWithCompanyData = {
       ...prospect,
+      company_name: prospect.apollo_companies?.name || null,  // From apollo_companies.name
       website_company: prospect.apollo_companies?.website || null,
       company_ai_classification: prospect.apollo_companies?.ai_classification || null,
       company_ai_score: prospect.apollo_companies?.ai_score || null
@@ -624,13 +625,8 @@ export default function ProspectsPage() {
                         {prospect.title || '-'}
                       </div>
                       <div className="text-sm font-medium text-gray-700 mt-1">
-                        {prospect.company_name}
+                        {prospect.apollo_companies?.name || 'Sin empresa'}
                       </div>
-                      {prospect.seniority && (
-                        <div className="text-xs text-gray-400 mt-0.5">
-                          {prospect.seniority}
-                        </div>
-                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {prospect.linkedin_invite_sent ? (
@@ -851,9 +847,9 @@ export default function ProspectsPage() {
                 <p className="text-sm text-gray-600">
                   <span className="font-medium">Email:</span> {emailProspect.email}
                 </p>
-                {emailProspect.company_name && (
+                {emailProspect.apollo_companies?.name && (
                   <p className="text-sm text-gray-600">
-                    <span className="font-medium">Empresa:</span> {emailProspect.company_name}
+                    <span className="font-medium">Empresa:</span> {emailProspect.apollo_companies.name}
                   </p>
                 )}
               </div>

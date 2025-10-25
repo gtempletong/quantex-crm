@@ -26,7 +26,6 @@ export async function GET(request: Request) {
         linkedin_url,
         company_id,
         company_name,
-        seniority,
         linkedin_invite_sent,
         linkedin_invite_sent_at,
         email_sent,
@@ -39,13 +38,13 @@ export async function GET(request: Request) {
         created_at,
         updated_at,
         apollo_companies!left(
+          name,
           website,
           ai_analysis_report,
           ai_score,
           ai_classification
         )
       `)
-      .or('ai_classification.neq.EXCLUIR,ai_classification.is.null')  // Mostrar todos excepto excluidos (incluye sin procesar)
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -142,7 +141,6 @@ export async function POST(request: Request) {
       title: body.title || null,
       company_id: companyId,
       company_name: body.company_name || null,
-      seniority: body.seniority || null,
       ai_classification: body.ai_classification || 'REVISAR',
       ai_score: body.ai_score || null,
       ai_justification: body.ai_justification || null,
